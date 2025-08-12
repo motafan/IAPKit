@@ -1,0 +1,42 @@
+/* 
+  Localizable.strings (English)
+  IAPFramework
+*/
+
+// MARK: - Error Messages
+"product_not_found" = "Product not found";
+"purchase_cancelled" = "Purchase was cancelled";
+"purchase_failed" = "Purchase failed: %@";
+"receipt_validation_failed" = "Receipt validation failed";
+"network_error" = "Network connection error";
+"payment_not_allowed" = "Payment not allowed";
+"product_not_available" = "Product is not available";
+"storekit_error" = "StoreKit error: %@";
+"transaction_processing_failed" = "Transaction processing failed: %@";
+"invalid_receipt_data" = "Invalid receipt data";
+"server_validation_failed" = "Server validation failed (status: %d)";
+"configuration_error" = "Configuration error: %@";
+"permission_denied" = "Permission denied";
+"timeout" = "Operation timed out";
+"unknown_error" = "Unknown error: %@";
+
+// MARK: - Recovery Suggestions
+"product_not_found_recovery" = "Please check the product ID and try again";
+"purchase_cancelled_recovery" = "You can try purchasing again if needed";
+"network_error_recovery" = "Please check your internet connection and try again";
+"payment_not_allowed_recovery" = "Please check your payment settings in device Settings";
+"timeout_recovery" = "Please try again, the operation may have timed out";
+"server_validation_failed_recovery" = "Please try again later or contact support";
+"configuration_error_recovery" = "Please check your app configuration";
+"general_recovery" = "Please try again later";
+
+// MARK: - Success Messages
+"purchase_successful" = "Purchase completed successfully";
+"restore_successful" = "Purchases restored successfully";
+"load_products_successful" = "Products loaded successfully";
+
+// MARK: - Status Messages
+"loading_products" = "Loading products...";
+"processing_purchase" = "Processing purchase...";
+"restoring_purchases" = "Restoring purchases...";
+"validating_receipt" = "Validating receipt...";

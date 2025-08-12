@@ -1,0 +1,42 @@
+/* 
+  Localizable.strings (Simplified Chinese)
+  IAPFramework
+*/
+
+// MARK: - Error Messages
+"product_not_found" = "未找到商品";
+"purchase_cancelled" = "购买已取消";
+"purchase_failed" = "购买失败：%@";
+"receipt_validation_failed" = "收据验证失败";
+"network_error" = "网络连接错误";
+"payment_not_allowed" = "不允许付款";
+"product_not_available" = "商品不可用";
+"storekit_error" = "StoreKit 错误：%@";
+"transaction_processing_failed" = "交易处理失败：%@";
+"invalid_receipt_data" = "收据数据无效";
+"server_validation_failed" = "服务器验证失败（状态：%d）";
+"configuration_error" = "配置错误：%@";
+"permission_denied" = "权限被拒绝";
+"timeout" = "操作超时";
+"unknown_error" = "未知错误：%@";
+
+// MARK: - Recovery Suggestions
+"product_not_found_recovery" = "请检查商品 ID 并重试";
+"purchase_cancelled_recovery" = "如需要，您可以重新尝试购买";
+"network_error_recovery" = "请检查网络连接并重试";
+"payment_not_allowed_recovery" = "请在设备设置中检查您的付款设置";
+"timeout_recovery" = "请重试，操作可能已超时";
+"server_validation_failed_recovery" = "请稍后重试或联系客服";
+"configuration_error_recovery" = "请检查应用配置";
+"general_recovery" = "请稍后重试";
+
+// MARK: - Success Messages
+"purchase_successful" = "购买成功完成";
+"restore_successful" = "购买恢复成功";
+"load_products_successful" = "商品加载成功";
+
+// MARK: - Status Messages
+"loading_products" = "正在加载商品...";
+"processing_purchase" = "正在处理购买...";
+"restoring_purchases" = "正在恢复购买...";
+"validating_receipt" = "正在验证收据...";

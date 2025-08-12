@@ -1,0 +1,121 @@
+import Foundation
+
+/// 内购框架配置
+public struct IAPConfiguration: Sendable {
+    /// 是否启用调试日志
+    public let enableDebugLogging: Bool
+    
+    /// 自动完成交易
+    public let autoFinishTransactions: Bool
+    
+    /// 最大重试次数
+    public let maxRetryAttempts: Int
+    
+    /// 重试基础延迟时间（秒）
+    public let baseRetryDelay: TimeInterval
+    
+    /// 商品缓存过期时间（秒）
+    public let productCacheExpiration: TimeInterval
+    
+    /// 是否在应用启动时自动恢复未完成交易
+    public let autoRecoverTransactions: Bool
+    
+    /// 收据验证配置
+    public let receiptValidation: ReceiptValidationConfiguration
+    
+    public init(
+        enableDebugLogging: Bool = false,
+        autoFinishTransactions: Bool = true,
+        maxRetryAttempts: Int = 3,
+        baseRetryDelay: TimeInterval = 1.0,
+        productCacheExpiration: TimeInterval = 300, // 5 minutes
+        autoRecoverTransactions: Bool = true,
+        receiptValidation: ReceiptValidationConfiguration = .default
+    ) {
+        self.enableDebugLogging = enableDebugLogging
+        self.autoFinishTransactions = autoFinishTransactions
+        self.maxRetryAttempts = maxRetryAttempts
+        self.baseRetryDelay = baseRetryDelay
+        self.productCacheExpiration = productCacheExpiration
+        self.autoRecoverTransactions = autoRecoverTransactions
+        self.receiptValidation = receiptValidation
+    }
+    
+    /// 默认配置
+    public static let `default` = IAPConfiguration()
+}
+
+/// 收据验证配置
+public struct ReceiptValidationConfiguration: Sendable {
+    /// 验证模式
+    public let mode: ValidationMode
+    
+    /// 远程验证服务器 URL（仅远程验证模式有效）
+    public let serverURL: URL?
+    
+    /// 验证超时时间（秒）
+    public let timeout: TimeInterval
+    
+    /// 是否验证应用包标识符
+    public let validateBundleID: Bool
+    
+    /// 是否验证应用版本
+    public let validateAppVersion: Bool
+    
+    public init(
+        mode: ValidationMode = .local,
+        serverURL: URL? = nil,
+        timeout: TimeInterval = 30.0,
+        validateBundleID: Bool = true,
+        validateAppVersion: Bool = false
+    ) {
+        self.mode = mode
+        self.serverURL = serverURL
+        self.timeout = timeout
+        self.validateBundleID = validateBundleID
+        self.validateAppVersion = validateAppVersion
+    }
+    
+    /// 默认配置（仅本地验证）
+    public static let `default` = ReceiptValidationConfiguration()
+    
+    /// 验证模式
+    public enum ValidationMode: Sendable, CaseIterable {
+        /// 仅本地验证
+        case local
+        /// 仅远程验证
+        case remote
+        /// 先本地后远程验证
+        case localThenRemote
+    }
+}
+
+/// 购买选项
+public struct IAPPurchaseOptions: Sendable {
+    /// 应用账户令牌
+    public let appAccountToken: Data?
+    
+    /// 数量（仅消耗型商品支持）
+    public let quantity: Int
+    
+    /// 是否模拟购买（仅用于测试）
+    public let simulateAskToBuyInSandbox: Bool
+    
+    /// 促销优惠标识符
+    public let promotionalOfferID: String?
+    
+    public init(
+        appAccountToken: Data? = nil,
+        quantity: Int = 1,
+        simulateAskToBuyInSandbox: Bool = false,
+        promotionalOfferID: String? = nil
+    ) {
+        self.appAccountToken = appAccountToken
+        self.quantity = max(1, quantity) // 确保数量至少为1
+        self.simulateAskToBuyInSandbox = simulateAskToBuyInSandbox
+        self.promotionalOfferID = promotionalOfferID
+    }
+    
+    /// 默认购买选项
+    public static let `default` = IAPPurchaseOptions()
+}

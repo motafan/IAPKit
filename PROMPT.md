@@ -24,7 +24,7 @@
 2. 提供单元测试示例，覆盖核心购买流程。  
 3. 包含测试用 mock 或 stub 类，模拟 StoreKit 行为。  
 4. 使用 Swift Testing 框架验证异步流程测试可行（Swift Concurrency 测试功能）。
-5. 测试相关代码需要放到独立测试 target。
+5. 测试相关代码需要放到独立测试Target。
 
 【结构要求】  
 1. 使用单例管理类（如 IAPManager）。  

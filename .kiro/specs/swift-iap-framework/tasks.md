@@ -116,7 +116,7 @@
     - _Requirements: 1.3, 2.4, 3.2_
 
   - [ ] 8.2 完善测试基础设施
-    - 创建专门的测试辅助类到独立测试Target的目录，使用 Swift Testing 框架验证异步流程测试可行（Swift Concurrency 测试功能）。
+    - 创建专门的测试辅助类到Testing目录
     - 实现 MockProductService、MockPurchaseService 等测试辅助类
     - 添加测试数据生成工具和辅助方法
     - 创建测试用的配置和状态管理类

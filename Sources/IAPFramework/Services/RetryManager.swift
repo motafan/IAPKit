@@ -316,21 +316,21 @@ extension RetryManager {
         operationId: String,
         operation: @escaping () async throws -> T
     ) async throws -> T {
-        while await shouldRetry(for: operationId) {
+        while  shouldRetry(for: operationId) {
             do {
                 let result = try await operation()
-                await resetAttempts(for: operationId)
+                resetAttempts(for: operationId)
                 return result
             } catch {
                 let iapError = IAPError.from(error)
-                await recordAttempt(for: operationId, error: iapError)
+                recordAttempt(for: operationId, error: iapError)
                 
-                if await hasReachedMaxRetries(for: operationId) {
+                if hasReachedMaxRetries(for: operationId) {
                     throw iapError
                 }
                 
                 // 等待重试延迟
-                let delay = await getDelay(for: operationId)
+                let delay = getDelay(for: operationId)
                 if delay > 0 {
                     // 简单的延迟实现，不使用 Task.sleep
                     IAPLogger.debug("RetryManager: Waiting \(delay) seconds before retry")

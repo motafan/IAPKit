@@ -61,8 +61,3 @@ func testPublicAPI() async {
     
     print("\n🎉 All public API methods are accessible and working!")
 }
-
-// Run the test
-Task {
-    await testPublicAPI()
-}

@@ -234,4 +234,15 @@ public struct IAPReceiptValidationResult: Sendable, Equatable {
         self.environment = environment
         self.validationTimestamp = Date()
     }
+    
+    public static func == (lhs: IAPReceiptValidationResult, rhs: IAPReceiptValidationResult) -> Bool {
+        return lhs.isValid == rhs.isValid &&
+               lhs.transactions == rhs.transactions &&
+               lhs.error == rhs.error &&
+               lhs.receiptCreationDate == rhs.receiptCreationDate &&
+               lhs.appVersion == rhs.appVersion &&
+               lhs.originalAppVersion == rhs.originalAppVersion &&
+               lhs.environment == rhs.environment &&
+               lhs.validationTimestamp == rhs.validationTimestamp
+    }
 }

@@ -62,22 +62,75 @@ public struct ReceiptValidationConfiguration: Sendable {
     /// 是否验证应用版本
     public let validateAppVersion: Bool
     
+    /// 缓存过期时间（秒）
+    public let cacheExpiration: TimeInterval
+    
+    /// 最大重试次数
+    public let maxRetryAttempts: Int
+    
+    /// 重试延迟时间（秒）
+    public let retryDelay: TimeInterval
+    
     public init(
         mode: ValidationMode = .local,
         serverURL: URL? = nil,
         timeout: TimeInterval = 30.0,
         validateBundleID: Bool = true,
-        validateAppVersion: Bool = false
+        validateAppVersion: Bool = false,
+        cacheExpiration: TimeInterval = 300.0, // 5 minutes
+        maxRetryAttempts: Int = 3,
+        retryDelay: TimeInterval = 1.0
     ) {
         self.mode = mode
         self.serverURL = serverURL
         self.timeout = timeout
         self.validateBundleID = validateBundleID
         self.validateAppVersion = validateAppVersion
+        self.cacheExpiration = cacheExpiration
+        self.maxRetryAttempts = maxRetryAttempts
+        self.retryDelay = retryDelay
     }
     
     /// 默认配置（仅本地验证）
     public static let `default` = ReceiptValidationConfiguration()
+    
+    /// 远程验证配置
+    /// - Parameters:
+    ///   - serverURL: 验证服务器 URL
+    ///   - timeout: 超时时间
+    ///   - cacheExpiration: 缓存过期时间
+    /// - Returns: 远程验证配置
+    public static func remote(
+        serverURL: URL,
+        timeout: TimeInterval = 30.0,
+        cacheExpiration: TimeInterval = 300.0
+    ) -> ReceiptValidationConfiguration {
+        return ReceiptValidationConfiguration(
+            mode: .remote,
+            serverURL: serverURL,
+            timeout: timeout,
+            cacheExpiration: cacheExpiration
+        )
+    }
+    
+    /// 混合验证配置（先本地后远程）
+    /// - Parameters:
+    ///   - serverURL: 验证服务器 URL
+    ///   - timeout: 超时时间
+    ///   - cacheExpiration: 缓存过期时间
+    /// - Returns: 混合验证配置
+    public static func hybrid(
+        serverURL: URL,
+        timeout: TimeInterval = 30.0,
+        cacheExpiration: TimeInterval = 300.0
+    ) -> ReceiptValidationConfiguration {
+        return ReceiptValidationConfiguration(
+            mode: .localThenRemote,
+            serverURL: serverURL,
+            timeout: timeout,
+            cacheExpiration: cacheExpiration
+        )
+    }
     
     /// 验证模式
     public enum ValidationMode: Sendable, CaseIterable {

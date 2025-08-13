@@ -97,6 +97,25 @@ public struct IAPProduct: Sendable, Identifiable, Equatable {
         return localizedPrice
     }
     
+    /// 格式化的价格字符串（便利属性）
+    public var formattedPrice: String {
+        return localizedPrice
+    }
+    
+    /// 商品类型的本地化描述
+    public var localizedProductType: String {
+        switch productType {
+        case .consumable:
+            return "消耗型商品"
+        case .nonConsumable:
+            return "非消耗型商品"
+        case .autoRenewableSubscription:
+            return "自动续费订阅"
+        case .nonRenewingSubscription:
+            return "非续费订阅"
+        }
+    }
+    
     /// 创建测试商品
     /// - Parameters:
     ///   - id: 商品ID

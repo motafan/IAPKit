@@ -2,7 +2,7 @@
 
 【技术要求】  
 1. 使用 Swift 6.0+。  
-2. 支持 iOS 13+。  
+2. 支持 iOS 13+ / macOS 10.15+。
 3. 全面使用 Swift Concurrency（async/await）实现异步流程，并启用严格的 Swift Concurrency 并发检查（Sendable、@MainActor 等）。  
 4. iOS 15+ 使用 StoreKit 2 API；iOS 13~14 使用 StoreKit 1 API，并用 withCheckedContinuation 包装成 async/await。  
 5. 框架结构模块化，可直接封装为 Swift Package。  
@@ -23,7 +23,8 @@
 1. 设计可测试接口（使用协议抽象关键依赖）。  
 2. 提供单元测试示例，覆盖核心购买流程。  
 3. 包含测试用 mock 或 stub 类，模拟 StoreKit 行为。  
-4. 确保异步流程测试可行（利用 XCTestExpectation 或 Swift Concurrency 测试功能）。  
+4. 使用 Swift Testing 框架验证异步流程测试可行（Swift Concurrency 测试功能）。
+5. 测试相关代码需要放到独立测试 target。
 
 【结构要求】  
 1. 使用单例管理类（如 IAPManager）。  

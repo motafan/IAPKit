@@ -7,25 +7,28 @@ public struct StoreKitAdapterFactory: Sendable {
     /// 适配器类型枚举
     public enum AdapterType: Sendable, CaseIterable {
         case storeKit2
-        case storeKit1Mock
+        case storeKit1
+//        case storeKit1Mock
         
         /// 适配器描述
         public var description: String {
             switch self {
             case .storeKit2:
                 return "StoreKit 2 (iOS 15+)"
-            case .storeKit1Mock:
-                return "StoreKit 1 Mock (iOS 13-14)"
+            case .storeKit1:
+                return "StoreKit 1 (iOS 13-14)"
+//            case .storeKit1Mock:
+//                return "StoreKit 1 Mock (Testing)"
             }
         }
         
         /// 是否为生产环境适配器
         public var isProductionReady: Bool {
             switch self {
-            case .storeKit2:
+            case .storeKit2, .storeKit1:
                 return true
-            case .storeKit1Mock:
-                return false // Mock 适配器不适用于生产环境
+//            case .storeKit1Mock:
+//                return false // Mock 适配器不适用于生产环境
             }
         }
     }
@@ -42,13 +45,18 @@ public struct StoreKitAdapterFactory: Sendable {
                 IAPLogger.info("Creating StoreKit 2 adapter")
                 return StoreKit2Adapter()
             } else {
-                IAPLogger.warning("StoreKit 2 not available, falling back to Mock adapter")
-                return MockStoreKitAdapter()
+                IAPLogger.warning("StoreKit 2 not available, falling back to StoreKit 1 adapter")
+                return StoreKit1Adapter()
             }
             
-        case .storeKit1Mock:
-            IAPLogger.info("Creating Mock StoreKit adapter")
-            return MockStoreKitAdapter()
+        case .storeKit1:
+            IAPLogger.info("Creating StoreKit 1 adapter")
+            return StoreKit1Adapter()
+            
+//        case .storeKit1Mock:
+//            IAPLogger.info("Creating Mock StoreKit adapter")
+//            // 使用 Testing 模块中的 MockStoreKitAdapter
+//            return MockStoreKitAdapter()
         }
     }
     
@@ -58,7 +66,7 @@ public struct StoreKitAdapterFactory: Sendable {
         if #available(iOS 15.0, macOS 12.0, *) {
             return .storeKit2
         } else {
-            return .storeKit1Mock
+            return .storeKit1
         }
     }
     
@@ -101,11 +109,17 @@ public struct StoreKitAdapterFactory: Sendable {
                 )
             }
             
-        case .storeKit1Mock:
+        case .storeKit1:
             return CompatibilityResult(
                 isCompatible: true,
-                message: "Mock adapter is compatible with all supported systems"
+                message: "StoreKit 1 is fully supported on this system"
             )
+            
+//        case .storeKit1Mock:
+//            return CompatibilityResult(
+//                isCompatible: true,
+//                message: "Mock adapter is compatible with all supported systems"
+//            )
         }
     }
     
@@ -176,61 +190,3 @@ public struct CompatibilityResult: Sendable {
     }
 }
 
-/// 简化的 Mock StoreKit 适配器，用于 iOS 13-14 兼容性
-public final class MockStoreKitAdapter: StoreKitAdapterProtocol {
-    
-    public init() {}
-    
-    public func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct] {
-        IAPLogger.info("MockStoreKitAdapter: Loading products \(productIDs)")
-        
-        // 返回模拟的商品数据
-        let mockProducts = productIDs.map { productID in
-            IAPProduct.mock(
-                id: productID,
-                displayName: "Mock Product",
-                price: 0.99,
-                productType: .consumable
-            )
-        }
-        
-        IAPLogger.info("MockStoreKitAdapter: Returning \(mockProducts.count) mock products")
-        return mockProducts
-    }
-    
-    public func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult {
-        IAPLogger.info("MockStoreKitAdapter: Simulating purchase for \(product.id)")
-        
-        // 模拟成功购买
-        let transaction = IAPTransaction.successful(
-            id: UUID().uuidString,
-            productID: product.id
-        )
-        
-        return .success(transaction)
-    }
-    
-    public func restorePurchases() async throws -> [IAPTransaction] {
-        IAPLogger.info("MockStoreKitAdapter: Simulating restore purchases")
-        
-        // 返回空的恢复结果
-        return []
-    }
-    
-    public func startTransactionObserver() async {
-        IAPLogger.info("MockStoreKitAdapter: Starting transaction observer")
-    }
-    
-    public func stopTransactionObserver() {
-        IAPLogger.info("MockStoreKitAdapter: Stopping transaction observer")
-    }
-    
-    public func getPendingTransactions() async -> [IAPTransaction] {
-        IAPLogger.info("MockStoreKitAdapter: Getting pending transactions")
-        return []
-    }
-    
-    public func finishTransaction(_ transaction: IAPTransaction) async throws {
-        IAPLogger.info("MockStoreKitAdapter: Finishing transaction \(transaction.id)")
-    }
-}

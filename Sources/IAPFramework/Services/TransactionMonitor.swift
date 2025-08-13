@@ -268,12 +268,11 @@ public final class TransactionMonitor: Sendable {
         IAPLogger.info("TransactionMonitor: Processing deferred transaction: \(transaction.id)")
         // 延期的交易（如等待家长批准）不需要立即处理
     }
-}
-
-// MARK: - Supporting Types
-
-/// 监控统计信息
-public struct MonitoringStats: Sendable {
+    
+    // MARK: - Supporting Types
+    
+    /// 监控统计信息
+    public struct MonitoringStats: Sendable {
     /// 监控开始时间
     public var startTime: Date?
     
@@ -327,7 +326,8 @@ public struct MonitoringStats: Sendable {
         """
     }
     
-    public init() {}
+        public init() {}
+    }
 }
 
 // MARK: - Transaction Monitor Extensions

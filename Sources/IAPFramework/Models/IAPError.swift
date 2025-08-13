@@ -165,6 +165,42 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
         }
     }
     
+    /// 用户友好的错误描述（适用于 UI 提示）
+    public var userFriendlyDescription: String {
+        switch self {
+        case .productNotFound:
+            return "商品不存在，请稍后重试"
+        case .purchaseCancelled:
+            return "购买已取消"
+        case .purchaseFailed:
+            return "购买失败，请检查网络连接"
+        case .networkError:
+            return "网络连接失败，请检查网络设置"
+        case .paymentNotAllowed:
+            return "当前设备不允许购买，请检查家长控制设置"
+        case .productNotAvailable:
+            return "商品暂时不可用，请稍后重试"
+        case .receiptValidationFailed:
+            return "收据验证失败，请联系客服"
+        case .timeout:
+            return "操作超时，请重试"
+        case .storeKitError:
+            return "应用商店服务异常，请稍后重试"
+        case .transactionProcessingFailed:
+            return "交易处理失败，请重试"
+        case .invalidReceiptData:
+            return "收据数据无效，请联系客服"
+        case .serverValidationFailed:
+            return "服务器验证失败，请稍后重试"
+        case .configurationError:
+            return "配置错误，请联系开发者"
+        case .permissionDenied:
+            return "权限被拒绝，请检查设置"
+        default:
+            return "发生未知错误，请重试"
+        }
+    }
+    
     /// 从系统错误创建 IAPError
     /// - Parameter error: 系统错误
     /// - Returns: IAPError 实例

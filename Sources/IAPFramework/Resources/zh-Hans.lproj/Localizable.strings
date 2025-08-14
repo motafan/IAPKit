@@ -1,9 +1,11 @@
 /* 
   Localizable.strings (Simplified Chinese)
   IAPFramework
+  
+  完整的中文本地化字符串，涵盖所有用户界面文本和错误消息
 */
 
-// MARK: - Error Messages
+// MARK: - Error Messages (错误消息)
 "product_not_found" = "未找到商品";
 "purchase_cancelled" = "购买已取消";
 "purchase_failed" = "购买失败：%@";
@@ -14,29 +16,139 @@
 "storekit_error" = "StoreKit 错误：%@";
 "transaction_processing_failed" = "交易处理失败：%@";
 "invalid_receipt_data" = "收据数据无效";
-"server_validation_failed" = "服务器验证失败（状态：%d）";
+"server_validation_failed" = "服务器验证失败（状态码：%d）";
 "configuration_error" = "配置错误：%@";
 "permission_denied" = "权限被拒绝";
 "timeout" = "操作超时";
+"operation_cancelled" = "操作已取消";
 "unknown_error" = "未知错误：%@";
 
-// MARK: - Recovery Suggestions
-"product_not_found_recovery" = "请检查商品 ID 并重试";
-"purchase_cancelled_recovery" = "如需要，您可以重新尝试购买";
-"network_error_recovery" = "请检查网络连接并重试";
-"payment_not_allowed_recovery" = "请在设备设置中检查您的付款设置";
-"timeout_recovery" = "请重试，操作可能已超时";
-"server_validation_failed_recovery" = "请稍后重试或联系客服";
-"configuration_error_recovery" = "请检查应用配置";
-"general_recovery" = "请稍后重试";
+// MARK: - Detailed Error Messages (详细错误消息)
+"product_load_timeout" = "商品加载超时，请检查网络连接";
+"purchase_in_progress" = "已有购买正在进行中，请稍候";
+"restore_in_progress" = "恢复购买正在进行中，请稍候";
+"validation_in_progress" = "收据验证正在进行中，请稍候";
+"insufficient_permissions" = "应用权限不足，无法完成操作";
+"device_not_supported" = "当前设备不支持此功能";
+"app_store_unavailable" = "App Store 服务暂时不可用";
+"parental_controls_active" = "家长控制已启用，需要家长批准";
+"payment_method_invalid" = "付款方式无效或已过期";
+"subscription_expired" = "订阅已过期";
+"subscription_cancelled" = "订阅已被取消";
+"refund_processed" = "购买已退款";
 
-// MARK: - Success Messages
-"purchase_successful" = "购买成功完成";
-"restore_successful" = "购买恢复成功";
-"load_products_successful" = "商品加载成功";
+// MARK: - Recovery Suggestions (恢复建议)
+"product_not_found_recovery" = "请检查商品 ID 是否正确，或联系开发者";
+"purchase_cancelled_recovery" = "如需购买，请重新尝试";
+"network_error_recovery" = "请检查网络连接后重试";
+"payment_not_allowed_recovery" = "请在"设置">"屏幕使用时间"中检查购买限制";
+"timeout_recovery" = "网络较慢，请稍后重试";
+"operation_cancelled_recovery" = "操作已取消，如需继续请重新开始";
+"server_validation_failed_recovery" = "服务器繁忙，请稍后重试或联系客服";
+"configuration_error_recovery" = "应用配置有误，请联系开发者";
+"general_recovery" = "请稍后重试，如问题持续请联系客服";
+"parental_controls_recovery" = "请联系家长批准此次购买";
+"payment_method_recovery" = "请在"设置">"Apple ID"中更新付款信息";
+"app_store_recovery" = "App Store 服务异常，请稍后重试";
 
-// MARK: - Status Messages
-"loading_products" = "正在加载商品...";
+// MARK: - Success Messages (成功消息)
+"purchase_successful" = "购买成功！";
+"restore_successful" = "购买恢复成功！";
+"load_products_successful" = "商品信息加载完成";
+"validation_successful" = "收据验证成功";
+"subscription_activated" = "订阅已激活";
+"subscription_renewed" = "订阅已续费";
+"transaction_completed" = "交易已完成";
+
+// MARK: - Status Messages (状态消息)
+"loading_products" = "正在加载商品信息...";
 "processing_purchase" = "正在处理购买...";
-"restoring_purchases" = "正在恢复购买...";
+"restoring_purchases" = "正在恢复购买记录...";
 "validating_receipt" = "正在验证收据...";
+"connecting_app_store" = "正在连接 App Store...";
+"preparing_transaction" = "正在准备交易...";
+"finalizing_purchase" = "正在完成购买...";
+"checking_subscription" = "正在检查订阅状态...";
+"updating_entitlements" = "正在更新权限...";
+
+// MARK: - Product Types (商品类型)
+"product_type_consumable" = "消耗型商品";
+"product_type_non_consumable" = "非消耗型商品";
+"product_type_auto_renewable_subscription" = "自动续费订阅";
+"product_type_non_renewing_subscription" = "非续费订阅";
+
+// MARK: - Subscription Periods (订阅周期)
+"subscription_period_day" = "天";
+"subscription_period_week" = "周";
+"subscription_period_month" = "月";
+"subscription_period_year" = "年";
+"subscription_period_days" = "天";
+"subscription_period_weeks" = "周";
+"subscription_period_months" = "个月";
+"subscription_period_years" = "年";
+
+// MARK: - Transaction States (交易状态)
+"transaction_state_purchasing" = "购买中";
+"transaction_state_purchased" = "已购买";
+"transaction_state_failed" = "购买失败";
+"transaction_state_restored" = "已恢复";
+"transaction_state_deferred" = "等待批准";
+
+// MARK: - Buttons and Actions (按钮和操作)
+"button_retry" = "重试";
+"button_cancel" = "取消";
+"button_ok" = "确定";
+"button_continue" = "继续";
+"button_restore" = "恢复购买";
+"button_purchase" = "购买";
+"button_subscribe" = "订阅";
+"button_manage_subscription" = "管理订阅";
+"button_contact_support" = "联系客服";
+
+// MARK: - Alerts and Dialogs (提醒和对话框)
+"alert_title_error" = "错误";
+"alert_title_success" = "成功";
+"alert_title_warning" = "注意";
+"alert_title_info" = "信息";
+"alert_title_confirm" = "确认";
+
+// MARK: - Purchase Flow (购买流程)
+"purchase_confirmation_title" = "确认购买";
+"purchase_confirmation_message" = "您确定要购买"%@"吗？";
+"subscription_confirmation_title" = "确认订阅";
+"subscription_confirmation_message" = "您确定要订阅"%@"吗？\n\n订阅将自动续费，您可以随时在设置中取消。";
+"restore_confirmation_title" = "恢复购买";
+"restore_confirmation_message" = "这将恢复您之前购买的所有非消耗型商品和订阅。";
+
+// MARK: - Subscription Details (订阅详情)
+"subscription_free_trial" = "免费试用";
+"subscription_introductory_price" = "优惠价格";
+"subscription_regular_price" = "常规价格";
+"subscription_auto_renew" = "自动续费";
+"subscription_cancel_anytime" = "随时可取消";
+"subscription_terms_and_conditions" = "条款和条件";
+"subscription_privacy_policy" = "隐私政策";
+
+// MARK: - Cache and Performance (缓存和性能)
+"cache_cleared" = "缓存已清理";
+"cache_updated" = "缓存已更新";
+"products_cached" = "商品信息已缓存";
+"loading_from_cache" = "正在从缓存加载...";
+"refreshing_data" = "正在刷新数据...";
+
+// MARK: - Debug and Development (调试和开发)
+"debug_mode_enabled" = "调试模式已启用";
+"test_environment" = "测试环境";
+"production_environment" = "生产环境";
+"storekit_version_1" = "StoreKit 1";
+"storekit_version_2" = "StoreKit 2";
+"adapter_selected" = "适配器已选择：%@";
+
+// MARK: - Accessibility (无障碍访问)
+"accessibility_purchase_button" = "购买按钮";
+"accessibility_restore_button" = "恢复购买按钮";
+"accessibility_product_price" = "商品价格";
+"accessibility_subscription_period" = "订阅周期";
+"accessibility_loading_indicator" = "正在加载";
+"accessibility_error_message" = "错误消息";
+"accessibility_success_message" = "成功消息";

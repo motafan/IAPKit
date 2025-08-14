@@ -95,9 +95,18 @@ public actor RetryManager {
     
     /// 清除所有重试记录
     public func clearAll() {
-        let count = retryAttempts.count
+        let retryCount = retryAttempts.count
+        let delayCount = delayStatistics.count
+        let activeDelayCount = activeDelayTasks.count
+        
+        // 取消所有活跃的延迟任务
+        cancelAllDelays()
+        
+        // 清除所有记录
         retryAttempts.removeAll()
-        IAPLogger.debug("RetryManager: Cleared all retry records (\(count) operations)")
+        delayStatistics.removeAll()
+        
+        IAPLogger.debug("RetryManager: Cleared all records - retry: \(retryCount), delay stats: \(delayCount), cancelled delays: \(activeDelayCount)")
     }
     
     /// 清除过期的重试记录
@@ -165,6 +174,145 @@ public actor RetryManager {
         let delay = getDelay(for: operationId)
         return record.lastAttemptTime.addingTimeInterval(delay)
     }
+    
+    // MARK: - Delay Management
+    
+    /// 延迟统计信息
+    private var delayStatistics: [String: DelayStatistics] = [:]
+    
+    /// 当前正在进行的延迟任务
+    private var activeDelayTasks: [String: Task<Void, Error>] = [:]
+    
+    /// 执行延迟操作（使用 Task.sleep）
+    /// - Parameters:
+    ///   - duration: 延迟时间（秒）
+    ///   - operationId: 操作标识符
+    /// - Throws: 延迟被取消或其他错误
+    private func performDelay(_ duration: TimeInterval, for operationId: String) async throws {
+        let startTime = Date()
+        let nanoseconds = UInt64(duration * 1_000_000_000)
+        
+        IAPLogger.debug("RetryManager: Starting delay of \(duration) seconds for operation: \(operationId)")
+        
+        // 创建可取消的延迟任务
+        let delayTask = Task {
+            try await Task.sleep(nanoseconds: nanoseconds)
+        }
+        
+        // 记录活跃的延迟任务
+        activeDelayTasks[operationId] = delayTask
+        
+        // 确保在任何情况下都清理活跃任务记录
+        defer {
+            activeDelayTasks.removeValue(forKey: operationId)
+        }
+        
+        do {
+            try await delayTask.value
+            
+            // 记录延迟统计
+            let actualDuration = Date().timeIntervalSince(startTime)
+            recordDelayStatistics(for: operationId, planned: duration, actual: actualDuration)
+            
+            IAPLogger.debug("RetryManager: Completed delay for operation: \(operationId), actual duration: \(actualDuration)")
+            
+        } catch is CancellationError {
+            IAPLogger.debug("RetryManager: Delay cancelled for operation: \(operationId)")
+            throw IAPError.operationCancelled
+        } catch {
+            IAPLogger.warning("RetryManager: Delay failed for operation: \(operationId), error: \(error.localizedDescription)")
+            throw IAPError.from(error)
+        }
+    }
+    
+    /// 取消指定操作的延迟
+    /// - Parameter operationId: 操作标识符
+    public func cancelDelay(for operationId: String) {
+        if let delayTask = activeDelayTasks[operationId] {
+            delayTask.cancel()
+            activeDelayTasks.removeValue(forKey: operationId)
+            IAPLogger.debug("RetryManager: Cancelled delay for operation: \(operationId)")
+        }
+    }
+    
+    /// 取消所有活跃的延迟
+    public func cancelAllDelays() {
+        let cancelledCount = activeDelayTasks.count
+        for (_, delayTask) in activeDelayTasks {
+            delayTask.cancel()
+        }
+        activeDelayTasks.removeAll()
+        
+        if cancelledCount > 0 {
+            IAPLogger.debug("RetryManager: Cancelled \(cancelledCount) active delays")
+        }
+    }
+    
+    /// 获取当前活跃的延迟操作
+    /// - Returns: 活跃延迟操作的标识符数组
+    public func getActiveDelayOperations() -> [String] {
+        return Array(activeDelayTasks.keys)
+    }
+    
+    /// 检查指定操作是否正在延迟中
+    /// - Parameter operationId: 操作标识符
+    /// - Returns: 是否正在延迟
+    public func isDelaying(for operationId: String) -> Bool {
+        return activeDelayTasks[operationId] != nil
+    }
+    
+    /// 记录延迟统计信息
+    /// - Parameters:
+    ///   - operationId: 操作标识符
+    ///   - planned: 计划延迟时间
+    ///   - actual: 实际延迟时间
+    private func recordDelayStatistics(for operationId: String, planned: TimeInterval, actual: TimeInterval) {
+        if var stats = delayStatistics[operationId] {
+            stats.totalDelays += 1
+            stats.totalPlannedTime += planned
+            stats.totalActualTime += actual
+            stats.maxDelay = max(stats.maxDelay, actual)
+            stats.minDelay = min(stats.minDelay, actual)
+            stats.lastDelayTime = Date()
+            delayStatistics[operationId] = stats
+        } else {
+            delayStatistics[operationId] = DelayStatistics(
+                operationId: operationId,
+                totalDelays: 1,
+                totalPlannedTime: planned,
+                totalActualTime: actual,
+                maxDelay: actual,
+                minDelay: actual,
+                lastDelayTime: Date()
+            )
+        }
+    }
+    
+    /// 获取延迟统计信息
+    /// - Parameter operationId: 操作标识符
+    /// - Returns: 延迟统计信息
+    public func getDelayStatistics(for operationId: String) -> DelayStatistics? {
+        return delayStatistics[operationId]
+    }
+    
+    /// 获取所有延迟统计信息
+    /// - Returns: 所有操作的延迟统计信息
+    public func getAllDelayStatistics() -> [String: DelayStatistics] {
+        return delayStatistics
+    }
+    
+    /// 清除延迟统计信息
+    /// - Parameter operationId: 操作标识符（可选，不提供则清除所有）
+    public func clearDelayStatistics(for operationId: String? = nil) {
+        if let operationId = operationId {
+            delayStatistics.removeValue(forKey: operationId)
+            IAPLogger.debug("RetryManager: Cleared delay statistics for operation: \(operationId)")
+        } else {
+            let count = delayStatistics.count
+            delayStatistics.removeAll()
+            IAPLogger.debug("RetryManager: Cleared all delay statistics (\(count) operations)")
+        }
+    }
 }
 
 // MARK: - Supporting Types
@@ -189,6 +337,48 @@ public struct RetryRecord: Sendable {
     /// 总耗时
     public var totalDuration: TimeInterval {
         return lastAttemptTime.timeIntervalSince(firstAttemptTime)
+    }
+}
+
+/// 延迟统计信息
+public struct DelayStatistics: Sendable {
+    /// 操作标识符
+    public let operationId: String
+    
+    /// 总延迟次数
+    public var totalDelays: Int
+    
+    /// 总计划延迟时间
+    public var totalPlannedTime: TimeInterval
+    
+    /// 总实际延迟时间
+    public var totalActualTime: TimeInterval
+    
+    /// 最大延迟时间
+    public var maxDelay: TimeInterval
+    
+    /// 最小延迟时间
+    public var minDelay: TimeInterval
+    
+    /// 最后延迟时间
+    public var lastDelayTime: Date
+    
+    /// 平均计划延迟时间
+    public var averagePlannedDelay: TimeInterval {
+        guard totalDelays > 0 else { return 0 }
+        return totalPlannedTime / Double(totalDelays)
+    }
+    
+    /// 平均实际延迟时间
+    public var averageActualDelay: TimeInterval {
+        guard totalDelays > 0 else { return 0 }
+        return totalActualTime / Double(totalDelays)
+    }
+    
+    /// 延迟精度（实际时间与计划时间的比率）
+    public var delayAccuracy: Double {
+        guard totalPlannedTime > 0 else { return 0 }
+        return totalActualTime / totalPlannedTime
     }
 }
 
@@ -312,11 +502,11 @@ extension RetryManager {
     ///   - operation: 要执行的操作
     /// - Returns: 操作结果
     /// - Throws: 最后一次尝试的错误
-    public func executeWithRetry<T>(
+    public func executeWithRetry<T: Sendable>(
         operationId: String,
-        operation: @escaping () async throws -> T
+        operation: @Sendable () async throws -> T
     ) async throws -> T {
-        while  shouldRetry(for: operationId) {
+        while shouldRetry(for: operationId) {
             do {
                 let result = try await operation()
                 resetAttempts(for: operationId)
@@ -332,8 +522,7 @@ extension RetryManager {
                 // 等待重试延迟
                 let delay = getDelay(for: operationId)
                 if delay > 0 {
-                    // 简单的延迟实现，不使用 Task.sleep
-                    IAPLogger.debug("RetryManager: Waiting \(delay) seconds before retry")
+                    try await performDelay(delay, for: operationId)
                 }
             }
         }

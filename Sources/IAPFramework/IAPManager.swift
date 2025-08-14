@@ -1,6 +1,94 @@
 import Foundation
 
-/// 内购管理器主类，整合所有服务组件
+/**
+ 内购管理器主类，整合所有服务组件
+ 
+ `IAPManager` 是 Swift IAP Framework 的核心管理类，提供了完整的内购功能实现。
+ 它采用单例模式，整合了商品服务、购买服务、交易监控等所有组件，为应用提供统一的内购接口。
+ 
+ ## 核心特性
+ 
+ ### 🔄 跨版本兼容性
+ - **自动适配**: 运行时检测系统版本，自动选择 StoreKit 1 或 StoreKit 2
+ - **透明切换**: 上层 API 保持一致，无需关心底层实现差异
+ - **向前兼容**: 支持 iOS 13+ 的所有版本
+ 
+ ### 🛡️ 防丢单机制
+ - **启动恢复**: 应用启动时自动检查和处理未完成交易
+ - **实时监控**: 持续监听交易队列状态变化
+ - **智能重试**: 指数退避算法处理失败交易
+ - **状态持久化**: 关键状态信息本地存储
+ 
+ ### ⚡ 性能优化
+ - **智能缓存**: 商品信息缓存，减少网络请求
+ - **并发安全**: 使用 Swift Concurrency 确保线程安全
+ - **内存管理**: 自动清理过期数据和无用资源
+ 
+ ### 🔧 可配置性
+ - **灵活配置**: 支持自定义配置选项
+ - **依赖注入**: 支持测试时注入 Mock 对象
+ - **调试支持**: 详细的日志和调试信息
+ 
+ ## 使用指南
+ 
+ ### 基本初始化
+ ```swift
+ // 使用默认单例
+ let manager = IAPManager.shared
+ await manager.initialize()
+ ```
+ 
+ ### 自定义配置
+ ```swift
+ var config = IAPConfiguration.default
+ config.enableDebugLogging = true
+ config.autoFinishTransactions = false
+ 
+ let manager = IAPManager(configuration: config)
+ await manager.initialize()
+ ```
+ 
+ ### 完整购买流程
+ ```swift
+ // 1. 加载商品
+ let products = try await manager.loadProducts(productIDs: ["com.app.premium"])
+ 
+ // 2. 购买商品
+ let result = try await manager.purchase(products.first!)
+ 
+ // 3. 处理结果
+ switch result {
+ case .success(let transaction):
+     // 购买成功，激活功能
+     activatePremiumFeatures()
+ case .cancelled:
+     // 用户取消购买
+     showCancelledMessage()
+ }
+ ```
+ 
+ ## 生命周期管理
+ 
+ ```swift
+ class AppDelegate: UIApplicationDelegate {
+     func application(_ application: UIApplication, 
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+         Task {
+             await IAPManager.shared.initialize()
+         }
+         return true
+     }
+     
+     func applicationWillTerminate(_ application: UIApplication) {
+         IAPManager.shared.cleanup()
+     }
+ }
+ ```
+ 
+ - Note: 使用 `@MainActor` 标记，确保所有操作在主线程执行
+ - Important: 必须在应用启动时调用 `initialize()` 方法
+ - Warning: 不要在多个地方创建 IAPManager 实例，推荐使用单例模式
+ */
 @MainActor
 public final class IAPManager: IAPManagerProtocol {
     

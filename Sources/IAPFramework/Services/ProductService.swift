@@ -1,6 +1,95 @@
 import Foundation
 
-/// 商品服务，负责商品信息的加载和管理
+/**
+ 商品服务，负责商品信息的加载和管理
+ 
+ `ProductService` 是框架的商品管理核心，负责从 App Store 加载商品信息、
+ 管理商品缓存、提供商品查询和过滤功能。它通过 StoreKit 适配器与底层 API 交互，
+ 为上层提供统一的商品管理接口。
+ 
+ ## 核心功能
+ 
+ ### 🔄 智能缓存机制
+ - **自动缓存**: 首次加载的商品自动缓存到内存
+ - **过期管理**: 缓存项有过期时间，过期后自动重新加载
+ - **缓存优化**: 优先返回缓存数据，减少网络请求
+ - **内存管理**: 自动清理过期和无用的缓存项
+ 
+ ### 📦 批量加载优化
+ - **批量请求**: 支持一次加载多个商品
+ - **增量加载**: 只加载未缓存的商品
+ - **错误恢复**: 部分失败时返回已缓存的商品
+ - **顺序保持**: 返回结果按请求顺序排列
+ 
+ ### 🔍 商品查询和过滤
+ - **单品查询**: 通过 ID 快速查询单个商品
+ - **类型过滤**: 按商品类型过滤商品列表
+ - **价格排序**: 按价格升序或降序排列
+ - **文本搜索**: 在商品名称和描述中搜索
+ 
+ ## 缓存策略
+ 
+ ### 缓存生命周期
+ ```
+ 加载商品 → 检查缓存 → 网络请求 → 更新缓存 → 返回结果
+      ↓           ↓           ↓           ↓
+   缓存命中    缓存未命中    请求成功    缓存更新
+      ↓           ↓           ↓           ↓
+   直接返回    发起请求    缓存结果    定期清理
+ ```
+ 
+ ### 缓存配置
+ - **默认过期时间**: 30 分钟
+ - **最大缓存数量**: 1000 个商品
+ - **清理策略**: LRU（最近最少使用）
+ 
+ ## 使用示例
+ 
+ ### 基本使用
+ ```swift
+ let productService = ProductService(adapter: adapter)
+ 
+ // 加载商品
+ let products = try await productService.loadProducts(
+     productIDs: ["com.app.premium", "com.app.coins"]
+ )
+ 
+ // 获取单个商品
+ let product = await productService.getProduct(by: "com.app.premium")
+ ```
+ 
+ ### 缓存管理
+ ```swift
+ // 预加载商品（不抛出错误）
+ await productService.preloadProducts(productIDs: productIDs)
+ 
+ // 强制刷新
+ let freshProducts = try await productService.refreshProducts(productIDs: productIDs)
+ 
+ // 清理缓存
+ await productService.clearCache()
+ 
+ // 获取缓存统计
+ let stats = await productService.getCacheStats()
+ print("缓存商品数: \(stats.validItems)")
+ ```
+ 
+ ### 商品过滤和搜索
+ ```swift
+ // 按类型过滤
+ let subscriptions = productService.filterProducts(products, by: .autoRenewableSubscription)
+ 
+ // 按价格排序
+ let sortedProducts = productService.sortProductsByPrice(products, ascending: true)
+ 
+ // 文本搜索
+ let searchResults = productService.searchProducts(products, searchText: "premium")
+ ```
+ 
+ - Note: 使用 `@MainActor` 标记，确保所有操作在主线程执行
+ - Important: 商品信息可能会变化，建议定期刷新缓存
+ - Warning: 大量商品加载可能影响性能，建议分批处理
+ */
 @MainActor
 public final class ProductService: Sendable {
     

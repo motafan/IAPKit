@@ -1,4 +1,5 @@
 import Foundation
+import Crypto
 
 /// 收据验证器协议
 public protocol ReceiptValidatorProtocol: Sendable {
@@ -42,15 +43,21 @@ public actor ReceiptValidationCache {
     /// - Parameter receiptData: 收据数据
     /// - Returns: 缓存的验证结果（如果存在且未过期）
     public func getCachedResult(for receiptData: Data) -> IAPReceiptValidationResult? {
-        let key = receiptData.sha256Hash
-        
-        guard let item = cache[key], !item.isExpired else {
-            // 清除过期项
-            cache.removeValue(forKey: key)
+        do {
+            let key = try receiptData.sha256Hash
+            
+            guard let item = cache[key], !item.isExpired else {
+                // 清除过期项
+                cache.removeValue(forKey: key)
+                return nil
+            }
+            
+            return item.result
+        } catch {
+            // 如果哈希计算失败，记录错误并返回 nil
+            IAPLogger.logError(IAPError.from(error), context: ["operation": "getCachedResult"])
             return nil
         }
-        
-        return item.result
     }
     
     /// 缓存验证结果
@@ -63,13 +70,18 @@ public actor ReceiptValidationCache {
         for receiptData: Data,
         expiration: TimeInterval
     ) {
-        let key = receiptData.sha256Hash
-        let item = CacheItem(
-            result: result,
-            timestamp: Date(),
-            expiration: expiration
-        )
-        cache[key] = item
+        do {
+            let key = try receiptData.sha256Hash
+            let item = CacheItem(
+                result: result,
+                timestamp: Date(),
+                expiration: expiration
+            )
+            cache[key] = item
+        } catch {
+            // 如果哈希计算失败，记录错误但不抛出异常
+            IAPLogger.logError(IAPError.from(error), context: ["operation": "cacheResult"])
+        }
     }
     
     /// 清除所有缓存
@@ -95,30 +107,46 @@ public actor ReceiptValidationCache {
 // MARK: - Data Extensions
 
 extension Data {
-    /// 计算 SHA256 哈希值
+    /// 计算 SHA256 哈希值（使用 CryptoKit 进行安全哈希计算）
+    /// - Returns: 十六进制格式的哈希字符串
+    /// - Throws: 哈希计算过程中的错误
     var sha256Hash: String {
-        let digest = SHA256.hash(data: self)
-        return digest.compactMap { String(format: "%02x", $0) }.joined()
+        get throws {
+            let digest = SHA256.hash(data: self)
+            return digest.compactMap { String(format: "%02x", $0) }.joined()
+        }
     }
-}
-
-// MARK: - SHA256 Implementation
-
-/// 简化的 SHA256 实现（用于缓存键生成）
-private struct SHA256 {
-    static func hash(data: Data) -> [UInt8] {
-        // 这里使用简化的哈希实现
-        // 在实际应用中，应该使用 CryptoKit 或 CommonCrypto
-        let hash = data.withUnsafeBytes { bytes in
-            return Array(bytes)
+    
+    /// 计算 SHA256 哈希值的安全版本（不抛出异常）
+    /// - Returns: 十六进制格式的哈希字符串，失败时返回基于数据长度和前几个字节的简单标识符
+    var safeSHA256Hash: String {
+        do {
+            return try sha256Hash
+        } catch {
+            // 如果 CryptoKit 哈希失败，使用简单的备用方案
+            IAPLogger.warning("Failed to compute secure hash, using fallback: \(error.localizedDescription)")
+            return generateFallbackHash()
+        }
+    }
+    
+    /// 生成备用哈希（当 CryptoKit 不可用时）
+    /// - Returns: 基于数据内容的简单标识符
+    private func generateFallbackHash() -> String {
+        let length = self.count
+        let prefix = self.prefix(Swift.min(8, length))
+        let suffix = self.suffix(Swift.min(8, length))
+        
+        var hashValue: UInt64 = UInt64(length)
+        
+        // 使用前缀和后缀字节计算简单哈希
+        for byte in prefix {
+            hashValue = hashValue &* 31 &+ UInt64(byte)
         }
         
-        // 简单的哈希算法（仅用于演示）
-        var result: [UInt8] = Array(repeating: 0, count: 32)
-        for (index, byte) in hash.enumerated() {
-            result[index % 32] ^= byte
+        for byte in suffix {
+            hashValue = hashValue &* 37 &+ UInt64(byte)
         }
         
-        return result
+        return String(format: "fallback_%016x", hashValue)
     }
 }

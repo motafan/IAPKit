@@ -2,15 +2,18 @@
 
 ## Overview
 
-Swift IAP Framework 是一个现代化的内购框架，旨在为 iOS 应用提供完整、安全、易用的内购功能。框架采用协议导向设计，支持 iOS 13+ 系统，使用 Swift 6.0+ 和 Swift Concurrency，同时兼容 StoreKit 1 和 StoreKit 2 API。
+Swift IAP Framework is a modern in-app purchase framework designed to provide comprehensive, secure, and easy-to-use IAP functionality for iOS applications. The framework adopts a protocol-oriented design, supports iOS 13+ systems, uses Swift 6.0+ and Swift Concurrency, while being compatible with both StoreKit 1 and StoreKit 2 APIs. The framework is distributed as a Swift Package, has no external third-party dependencies, and supports both UIKit and SwiftUI frameworks.
 
-### 核心设计原则
+### Core Design Principles
 
-1. **版本兼容性**: 运行时检测系统版本，自动选择最适合的 StoreKit API
-2. **并发安全**: 全面使用 Swift Concurrency，确保线程安全
-3. **防丢单设计**: 持续监听交易队列，确保不遗漏任何购买
-4. **协议抽象**: 使用协议定义核心接口，便于测试和扩展
-5. **模块化架构**: 清晰的职责分离，便于维护和测试
+1. **Version Compatibility**: Runtime system version detection, automatically selecting the most suitable StoreKit API
+2. **Concurrency Safety**: Comprehensive use of Swift Concurrency, enabling strict concurrency checking to ensure thread safety
+3. **Anti-Loss Design**: Continuous monitoring of transaction queues, implementing intelligent retry mechanisms to ensure no purchases are missed
+4. **Protocol Abstraction**: Using protocols to define core interfaces, facilitating testing and extension
+5. **Modular Architecture**: Clear separation of responsibilities, facilitating maintenance and testing
+6. **Multi-Product Type Support**: Full support for consumable, non-consumable, and subscription products
+7. **Localization Support**: Complete multi-language error messages and user prompts
+8. **Zero Dependencies**: No external third-party library dependencies, keeping the framework lightweight
 
 ## Architecture
 
@@ -57,7 +60,7 @@ Swift IAP Framework 是一个现代化的内购框架，旨在为 iOS 应用提�
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 核心组件关系
+### Core Component Relationships
 
 ```mermaid
 graph TB
@@ -79,7 +82,7 @@ graph TB
 
 ## Components and Interfaces
 
-### 1. 核心协议定义
+### 1. Core Protocol Definitions
 
 #### IAPManagerProtocol
 ```swift
@@ -89,6 +92,10 @@ protocol IAPManagerProtocol: Sendable {
     func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
     func restorePurchases() async throws -> [IAPTransaction]
     func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult
+    
+    // Configuration and state management
+    func configure(with configuration: IAPConfiguration) async
+    var currentState: IAPState { get async }
 }
 ```
 
@@ -100,14 +107,26 @@ protocol StoreKitAdapterProtocol: Sendable {
     func restorePurchases() async throws -> [IAPTransaction]
     func startTransactionObserver() async
     func stopTransactionObserver()
+    
+    // Version-specific functionality
+    var supportedProductTypes: Set<IAPProductType> { get }
+    var isAvailable: Bool { get async }
 }
 ```
 
-### 2. 数据模型
+#### ReceiptValidatorProtocol
+```swift
+protocol ReceiptValidatorProtocol: Sendable {
+    func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult
+    func validateReceipt(_ receiptData: Data, remotely: Bool) async throws -> IAPReceiptValidationResult
+}
+```
+
+### 2. Data Models
 
 #### IAPProduct
 ```swift
-struct IAPProduct: Sendable, Identifiable {
+struct IAPProduct: Sendable, Identifiable, Equatable {
     let id: String
     let displayName: String
     let description: String
@@ -115,84 +134,166 @@ struct IAPProduct: Sendable, Identifiable {
     let priceLocale: Locale
     let productType: IAPProductType
     let subscriptionInfo: IAPSubscriptionInfo?
+    
+    // Localized price display
+    var localizedPrice: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = priceLocale
+        return formatter.string(from: price as NSDecimalNumber) ?? ""
+    }
 }
 
-enum IAPProductType: Sendable {
+enum IAPProductType: String, Sendable, CaseIterable {
     case consumable
     case nonConsumable
     case autoRenewableSubscription
     case nonRenewingSubscription
 }
+
+struct IAPSubscriptionInfo: Sendable, Equatable {
+    let subscriptionGroupID: String
+    let subscriptionPeriod: IAPSubscriptionPeriod
+    let introductoryPrice: IAPSubscriptionOffer?
+    let promotionalOffers: [IAPSubscriptionOffer]
+}
 ```
 
 #### IAPTransaction
 ```swift
-struct IAPTransaction: Sendable, Identifiable {
+struct IAPTransaction: Sendable, Identifiable, Equatable {
     let id: String
     let productID: String
     let purchaseDate: Date
     let transactionState: IAPTransactionState
     let receiptData: Data?
     let originalTransactionID: String?
+    let quantity: Int
+    
+    // Priority for anti-loss mechanism
+    var priority: Int {
+        switch transactionState {
+        case .purchasing: return 3
+        case .purchased: return 2
+        case .restored: return 1
+        case .failed, .deferred: return 0
+        }
+    }
 }
 
-enum IAPTransactionState: Sendable {
+enum IAPTransactionState: Sendable, Equatable {
     case purchasing
     case purchased
     case failed(IAPError)
     case restored
     case deferred
 }
+
+enum IAPPurchaseResult: Sendable, Equatable {
+    case success(IAPTransaction)
+    case pending(IAPTransaction)
+    case cancelled
+    case failed(IAPError)
+}
 ```
 
-### 3. 服务层组件
+### 3. Service Layer Components
 
 #### ProductService
-负责商品信息的加载和管理：
+Responsible for loading and managing product information, supporting multiple product types:
 ```swift
 @MainActor
 final class ProductService: Sendable {
     private let adapter: StoreKitAdapterProtocol
-    private var cachedProducts: [String: IAPProduct] = [:]
+    private let cache: IAPCache
     
     func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct]
     func getProduct(by id: String) -> IAPProduct?
     func clearCache()
+    
+    // Support for special handling of different product types
+    func loadConsumableProducts(productIDs: Set<String>) async throws -> [IAPProduct]
+    func loadSubscriptionProducts(productIDs: Set<String>) async throws -> [IAPProduct]
+    func loadNonConsumableProducts(productIDs: Set<String>) async throws -> [IAPProduct]
 }
 ```
 
 #### PurchaseService
-处理购买流程：
+Handles purchase flows for all product types:
 ```swift
 @MainActor
 final class PurchaseService: Sendable {
     private let adapter: StoreKitAdapterProtocol
     private let validator: ReceiptValidatorProtocol
+    private let retryManager: RetryManager
     
     func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
     func restorePurchases() async throws -> [IAPTransaction]
+    
+    // Support for purchase handling of different product types
+    private func handleConsumablePurchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
+    private func handleNonConsumablePurchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
+    private func handleSubscriptionPurchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
 }
 ```
 
 #### TransactionMonitor
-监听和处理交易状态变化：
+Real-time monitoring of transaction state changes, implementing anti-loss mechanisms:
 ```swift
 @MainActor
 final class TransactionMonitor: Sendable {
     private let adapter: StoreKitAdapterProtocol
+    private let recoveryManager: TransactionRecoveryManager
     private var isMonitoring = false
     
     func startMonitoring() async
     func stopMonitoring()
     func handlePendingTransactions() async
+    
+    // Core anti-loss functionality
+    func monitorTransactionQueue() async
+    func handleUnfinishedTransactions() async
+    private func processTransactionUpdate(_ transaction: IAPTransaction) async
 }
 ```
 
-### 4. 平台适配层
+### 4. Platform Adapter Layer
+
+#### StoreKitAdapterFactory
+Runtime version detection and adapter selection:
+```swift
+final class StoreKitAdapterFactory {
+    static func createAdapter() -> StoreKitAdapterProtocol {
+        if #available(iOS 15.0, *) {
+            return StoreKit2Adapter()
+        } else {
+            return StoreKit1Adapter()
+        }
+    }
+    
+    static var currentSystemVersion: String {
+        UIDevice.current.systemVersion
+    }
+    
+    static var isStoreKit2Available: Bool {
+        if #available(iOS 15.0, *) {
+            return true
+        }
+        return false
+    }
+}
+```
 
 #### StoreKit2Adapter (iOS 15+)
+Uses modern StoreKit 2 API, supporting all product types:
 ```swift
 final class StoreKit2Adapter: StoreKitAdapterProtocol {
+    private var transactionListener: Task<Void, Error>?
+    
+    var supportedProductTypes: Set<IAPProductType> {
+        [.consumable, .nonConsumable, .autoRenewableSubscription, .nonRenewingSubscription]
+    }
+    
     func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct] {
         let products = try await Product.products(for: productIDs)
         return products.map { convertToIAPProduct($0) }
@@ -206,22 +307,74 @@ final class StoreKit2Adapter: StoreKitAdapterProtocol {
         let result = try await storeProduct.purchase()
         return try await handlePurchaseResult(result)
     }
+    
+    func startTransactionObserver() async {
+        transactionListener = listenForTransactions()
+    }
+    
+    private func listenForTransactions() -> Task<Void, Error> {
+        Task.detached {
+            for await result in Transaction.updates {
+                await self.handleTransactionUpdate(result)
+            }
+        }
+    }
 }
 ```
 
 #### StoreKit1Adapter (iOS 13-14)
+Uses traditional StoreKit 1 API, converting to async/await through withCheckedContinuation:
 ```swift
 final class StoreKit1Adapter: NSObject, StoreKitAdapterProtocol {
+    private var productRequestContinuations: [String: CheckedContinuation<[IAPProduct], Error>] = [:]
+    private var purchaseContinuations: [String: CheckedContinuation<IAPPurchaseResult, Error>] = [:]
+    
+    var supportedProductTypes: Set<IAPProductType> {
+        [.consumable, .nonConsumable, .autoRenewableSubscription, .nonRenewingSubscription]
+    }
+    
     func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct] {
         return try await withCheckedThrowingContinuation { continuation in
+            let requestID = UUID().uuidString
+            productRequestContinuations[requestID] = continuation
+            
             let request = SKProductsRequest(productIdentifiers: productIDs)
-            // 实现 SKProductsRequestDelegate
+            request.delegate = self
+            request.start()
         }
     }
     
     func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult {
         return try await withCheckedThrowingContinuation { continuation in
-            // 使用 SKPaymentQueue 实现购买
+            purchaseContinuations[product.id] = continuation
+            
+            let payment = SKPayment(product: findSKProduct(for: product.id))
+            SKPaymentQueue.default().add(payment)
+        }
+    }
+    
+    func startTransactionObserver() async {
+        SKPaymentQueue.default().add(self)
+    }
+    
+    func stopTransactionObserver() {
+        SKPaymentQueue.default().remove(self)
+    }
+}
+
+// MARK: - SKProductsRequestDelegate
+extension StoreKit1Adapter: SKProductsRequestDelegate {
+    func productsRequest(_ request: SKProductsRequest, didReceive response: SKProductsResponse) {
+        let products = response.products.map { convertToIAPProduct($0) }
+        // Complete the corresponding continuation
+    }
+}
+
+// MARK: - SKPaymentTransactionObserver
+extension StoreKit1Adapter: SKPaymentTransactionObserver {
+    func paymentQueue(_ queue: SKPaymentQueue, updatedTransactions transactions: [SKPaymentTransaction]) {
+        for transaction in transactions {
+            handleSKTransaction(transaction)
         }
     }
 }
@@ -229,7 +382,7 @@ final class StoreKit1Adapter: NSObject, StoreKitAdapterProtocol {
 
 ## Data Models
 
-### 错误处理模型
+### Error Handling Model
 
 ```swift
 enum IAPError: LocalizedError, Sendable {
@@ -246,13 +399,13 @@ enum IAPError: LocalizedError, Sendable {
             return IAPUserMessage.productNotFound.localizedString
         case .purchaseCancelled:
             return IAPUserMessage.purchaseCancelled.localizedString
-        // ... 其他错误
+        // ... other errors
         }
     }
 }
 ```
 
-### 本地化支持
+### Localization Support
 
 ```swift
 enum IAPUserMessage: String, CaseIterable {
@@ -275,14 +428,68 @@ enum IAPDebugMessage: String {
 
 ## Error Handling
 
-### 错误处理策略
+### Error Handling Strategy
 
-1. **分层错误处理**: 每层都有明确的错误处理责任
-2. **错误转换**: 将系统错误转换为用户友好的错误
-3. **重试机制**: 对网络错误和临时错误实现自动重试
-4. **错误日志**: 详细记录错误信息用于调试
+1. **Layered Error Handling**: Each layer has clear error handling responsibilities
+2. **Error Transformation**: Converting system errors to user-friendly errors
+3. **Retry Mechanism**: Implementing exponential backoff retry for network and temporary errors
+4. **Error Logging**: Detailed error information logging for debugging
+5. **Localization Support**: All user-visible errors support multiple languages
 
-### 重试机制设计
+### Error Type Definitions
+
+```swift
+enum IAPError: LocalizedError, Sendable, Equatable {
+    case productNotFound
+    case purchaseCancelled
+    case purchaseFailed(underlying: String)
+    case receiptValidationFailed
+    case networkError
+    case storeKitNotAvailable
+    case invalidProductType
+    case transactionNotFound
+    case configurationError
+    case unknownError
+    
+    var errorDescription: String? {
+        switch self {
+        case .productNotFound:
+            return IAPUserMessage.productNotFound.localizedString
+        case .purchaseCancelled:
+            return IAPUserMessage.purchaseCancelled.localizedString
+        case .purchaseFailed:
+            return IAPUserMessage.purchaseFailed.localizedString
+        case .receiptValidationFailed:
+            return IAPUserMessage.receiptValidationFailed.localizedString
+        case .networkError:
+            return IAPUserMessage.networkError.localizedString
+        case .storeKitNotAvailable:
+            return IAPUserMessage.storeKitNotAvailable.localizedString
+        case .invalidProductType:
+            return IAPUserMessage.invalidProductType.localizedString
+        case .transactionNotFound:
+            return IAPUserMessage.transactionNotFound.localizedString
+        case .configurationError:
+            return IAPUserMessage.configurationError.localizedString
+        case .unknownError:
+            return IAPUserMessage.unknownError.localizedString
+        }
+    }
+    
+    var recoverySuggestion: String? {
+        switch self {
+        case .networkError:
+            return IAPUserMessage.networkErrorRecovery.localizedString
+        case .storeKitNotAvailable:
+            return IAPUserMessage.storeKitNotAvailableRecovery.localizedString
+        default:
+            return nil
+        }
+    }
+}
+```
+
+### Retry Mechanism Design
 
 ```swift
 actor RetryManager {
@@ -299,110 +506,562 @@ actor RetryManager {
         retryAttempts[operation, default: 0] += 1
     }
     
-    func getDelay(for operation: String) -> TimeInterval {
+    func getDelay(for operation: String) async -> TimeInterval {
         let attempts = retryAttempts[operation, default: 0]
-        return baseDelay * pow(2.0, Double(attempts)) // 指数退避
+        let delay = baseDelay * pow(2.0, Double(attempts)) // Exponential backoff
+        
+        // Actual delay execution
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        return delay
     }
+    
+    func reset(for operation: String) {
+        retryAttempts.removeValue(forKey: operation)
+    }
+    
+    func resetAll() {
+        retryAttempts.removeAll()
+    }
+}
+```
+
+### Localization Message System
+
+```swift
+enum IAPUserMessage: String, CaseIterable {
+    case productNotFound = "product_not_found"
+    case purchaseCancelled = "purchase_cancelled"
+    case purchaseFailed = "purchase_failed"
+    case purchaseSuccessful = "purchase_successful"
+    case restoreSuccessful = "restore_successful"
+    case receiptValidationFailed = "receipt_validation_failed"
+    case networkError = "network_error"
+    case networkErrorRecovery = "network_error_recovery"
+    case storeKitNotAvailable = "storekit_not_available"
+    case storeKitNotAvailableRecovery = "storekit_not_available_recovery"
+    case invalidProductType = "invalid_product_type"
+    case transactionNotFound = "transaction_not_found"
+    case configurationError = "configuration_error"
+    case unknownError = "unknown_error"
+    
+    var localizedString: String {
+        NSLocalizedString(self.rawValue, bundle: .module, comment: "")
+    }
+}
+
+enum IAPDebugMessage: String {
+    case loadingProducts = "Loading products with IDs: %@"
+    case purchaseStarted = "Purchase started for product: %@"
+    case transactionUpdated = "Transaction updated: %@"
+    case retryAttempt = "Retry attempt %d for operation: %@"
+    case adapterSelected = "Selected adapter: %@ for iOS %@"
 }
 ```
 
 ## Testing Strategy
 
-### 测试架构
+### Testing Architecture
 
-1. **协议抽象**: 所有核心组件都基于协议，便于 Mock
-2. **依赖注入**: 通过构造函数注入依赖，便于测试
-3. **异步测试**: 使用 Swift Concurrency 测试功能
-4. **Mock 对象**: 提供完整的 Mock 实现
+1. **Protocol Abstraction**: All core components are based on protocols, facilitating Mock and testing
+2. **Dependency Injection**: Injecting dependencies through constructors, supporting implementation replacement during testing
+3. **Asynchronous Testing**: Comprehensive use of Swift Concurrency testing features
+4. **Mock Objects**: Providing complete Mock implementations covering all test scenarios
+5. **Testing Tools**: Providing test data generators and state verification tools
+6. **Edge Case Testing**: Covering complex scenarios like network interruptions and application crashes
 
-### Mock 实现示例
+### Complete Mock Implementation
 
 ```swift
 final class MockStoreKitAdapter: StoreKitAdapterProtocol {
     var mockProducts: [IAPProduct] = []
     var mockPurchaseResult: IAPPurchaseResult?
+    var mockRestoreResults: [IAPTransaction] = []
     var mockError: Error?
+    var shouldSimulateDelay = false
+    var delayDuration: TimeInterval = 0.1
+    
+    var supportedProductTypes: Set<IAPProductType> {
+        [.consumable, .nonConsumable, .autoRenewableSubscription]
+    }
+    
+    var isAvailable: Bool {
+        get async { mockError == nil }
+    }
     
     func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct] {
+        if shouldSimulateDelay {
+            try await Task.sleep(nanoseconds: UInt64(delayDuration * 1_000_000_000))
+        }
+        
         if let error = mockError {
             throw error
         }
+        
         return mockProducts.filter { productIDs.contains($0.id) }
     }
     
     func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult {
+        if shouldSimulateDelay {
+            try await Task.sleep(nanoseconds: UInt64(delayDuration * 1_000_000_000))
+        }
+        
         if let error = mockError {
             throw error
         }
-        return mockPurchaseResult ?? .success(mockTransaction)
+        
+        return mockPurchaseResult ?? .success(createMockTransaction(for: product))
+    }
+    
+    func restorePurchases() async throws -> [IAPTransaction] {
+        if let error = mockError {
+            throw error
+        }
+        return mockRestoreResults
+    }
+    
+    func startTransactionObserver() async {
+        // Mock implementation
+    }
+    
+    func stopTransactionObserver() {
+        // Mock implementation
+    }
+}
+
+final class MockReceiptValidator: ReceiptValidatorProtocol {
+    var mockValidationResult: IAPReceiptValidationResult?
+    var mockError: Error?
+    var shouldValidateRemotely = false
+    
+    func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult {
+        if let error = mockError {
+            throw error
+        }
+        return mockValidationResult ?? .valid(transactions: [])
+    }
+    
+    func validateReceipt(_ receiptData: Data, remotely: Bool) async throws -> IAPReceiptValidationResult {
+        shouldValidateRemotely = remotely
+        return try await validateReceipt(receiptData)
     }
 }
 ```
 
-### 测试用例设计
+### Test Case Design
 
 ```swift
 final class IAPManagerTests: XCTestCase {
     private var sut: IAPManager!
     private var mockAdapter: MockStoreKitAdapter!
+    private var mockValidator: MockReceiptValidator!
     
     override func setUp() async throws {
         mockAdapter = MockStoreKitAdapter()
-        sut = IAPManager(adapter: mockAdapter)
+        mockValidator = MockReceiptValidator()
+        sut = IAPManager(
+            adapter: mockAdapter,
+            validator: mockValidator
+        )
     }
     
-    func testLoadProducts_Success() async throws {
+    func testLoadProducts_AllProductTypes_Success() async throws {
         // Given
-        let expectedProducts = [createMockProduct()]
-        mockAdapter.mockProducts = expectedProducts
+        let consumableProduct = TestDataGenerator.createProduct(type: .consumable)
+        let nonConsumableProduct = TestDataGenerator.createProduct(type: .nonConsumable)
+        let subscriptionProduct = TestDataGenerator.createProduct(type: .autoRenewableSubscription)
+        
+        mockAdapter.mockProducts = [consumableProduct, nonConsumableProduct, subscriptionProduct]
         
         // When
-        let products = try await sut.loadProducts(productIDs: ["test_product"])
+        let products = try await sut.loadProducts(productIDs: [
+            consumableProduct.id, nonConsumableProduct.id, subscriptionProduct.id
+        ])
         
         // Then
-        XCTAssertEqual(products.count, 1)
-        XCTAssertEqual(products.first?.id, "test_product")
+        XCTAssertEqual(products.count, 3)
+        XCTAssertTrue(products.contains { $0.productType == .consumable })
+        XCTAssertTrue(products.contains { $0.productType == .nonConsumable })
+        XCTAssertTrue(products.contains { $0.productType == .autoRenewableSubscription })
+    }
+    
+    func testPurchase_WithRetry_Success() async throws {
+        // Given
+        let product = TestDataGenerator.createProduct()
+        mockAdapter.mockError = IAPError.networkError
+        
+        // When & Then
+        do {
+            _ = try await sut.purchase(product)
+            XCTFail("Should have thrown network error")
+        } catch {
+            XCTAssertEqual(error as? IAPError, .networkError)
+        }
+        
+        // Reset error and retry
+        mockAdapter.mockError = nil
+        mockAdapter.mockPurchaseResult = .success(TestDataGenerator.createTransaction(for: product))
+        
+        let result = try await sut.purchase(product)
+        if case .success(let transaction) = result {
+            XCTAssertEqual(transaction.productID, product.id)
+        } else {
+            XCTFail("Expected success result")
+        }
     }
 }
 ```
 
-## 防丢单机制设计
+### Anti-Loss Mechanism Testing
 
-### 核心策略
+```swift
+final class AntiLossMechanismTests: XCTestCase {
+    func testTransactionRecovery_NetworkInterruption() async throws {
+        // Given
+        let mockAdapter = MockStoreKitAdapter()
+        let recoveryManager = TransactionRecoveryManager(adapter: mockAdapter)
+        
+        // Simulate network interruption during purchase
+        mockAdapter.mockError = IAPError.networkError
+        mockAdapter.shouldSimulateDelay = true
+        
+        // When
+        await recoveryManager.recoverPendingTransactions()
+        
+        // Then
+        // Verify retry mechanism was triggered
+        // Verify transactions were eventually processed
+    }
+    
+    func testRetryMechanism_ExponentialBackoff() async throws {
+        // Given
+        let retryManager = RetryManager()
+        let operation = "test_purchase"
+        
+        // When & Then
+        XCTAssertTrue(await retryManager.shouldRetry(for: operation))
+        await retryManager.recordAttempt(for: operation)
+        
+        let delay1 = await retryManager.getDelay(for: operation)
+        await retryManager.recordAttempt(for: operation)
+        
+        let delay2 = await retryManager.getDelay(for: operation)
+        
+        // Verify exponential backoff
+        XCTAssertGreaterThan(delay2, delay1)
+    }
+}
+```
 
-1. **启动时检查**: 应用启动时自动检查未完成交易
-2. **持续监听**: 实时监听交易队列状态变化
-3. **自动重试**: 对失败的交易实现智能重试
-4. **状态持久化**: 关键状态信息持久化存储
+## Anti-Loss Mechanism Design
 
-### 实现细节
+### Core Strategies
+
+1. **Startup Check**: Automatically check unfinished transactions when application starts
+2. **Continuous Monitoring**: Real-time monitoring of transaction queue state changes
+3. **Intelligent Retry**: Implement exponential backoff retry mechanism for failed transactions
+4. **State Persistence**: Persistent storage of critical state information
+5. **Priority Processing**: Process transactions sorted by importance and time
+6. **Network Recovery**: Automatically reprocess failed transactions after network recovery
+
+### Implementation Details
 
 ```swift
 @MainActor
 final class TransactionRecoveryManager: Sendable {
     private let adapter: StoreKitAdapterProtocol
     private let retryManager: RetryManager
+    private let cache: IAPCache
     
     func recoverPendingTransactions() async {
-        // 1. 获取所有未完成交易
+        IAPLogger.debug("Starting transaction recovery process")
+        
+        // 1. Get all unfinished transactions
         let pendingTransactions = await getPendingTransactions()
         
-        // 2. 按优先级排序处理
-        let sortedTransactions = pendingTransactions.sorted { $0.purchaseDate < $1.purchaseDate }
+        // 2. Sort by priority (purchasing transactions have highest priority)
+        let sortedTransactions = pendingTransactions.sorted { 
+            if $0.priority != $1.priority {
+                return $0.priority > $1.priority
+            }
+            return $0.purchaseDate < $1.purchaseDate
+        }
         
-        // 3. 逐个处理
+        IAPLogger.debug("Found \(sortedTransactions.count) pending transactions")
+        
+        // 3. Process one by one
         for transaction in sortedTransactions {
             await processTransaction(transaction)
         }
     }
     
     private func processTransaction(_ transaction: IAPTransaction) async {
+        let operationKey = "recover_\(transaction.id)"
+        
+        guard await retryManager.shouldRetry(for: operationKey) else {
+            IAPLogger.debug("Max retries reached for transaction: \(transaction.id)")
+            return
+        }
+        
         do {
-            // 尝试完成交易
+            // Get delay time and wait
+            _ = await retryManager.getDelay(for: operationKey)
+            await retryManager.recordAttempt(for: operationKey)
+            
+            // Try to complete transaction
             try await completeTransaction(transaction)
+            
+            // Reset retry count after success
+            await retryManager.reset(for: operationKey)
+            IAPLogger.debug("Successfully recovered transaction: \(transaction.id)")
+            
         } catch {
-            // 记录失败并安排重试
-            await scheduleRetry(for: transaction, error: error)
+            IAPLogger.debug("Failed to recover transaction \(transaction.id): \(error)")
+            
+            // If can still retry, schedule next retry
+            if await retryManager.shouldRetry(for: operationKey) {
+                await scheduleRetry(for: transaction, error: error)
+            } else {
+                // Reached maximum retry count, record failure
+                await handlePermanentFailure(transaction, error: error)
+            }
+        }
+    }
+    
+    private func completeTransaction(_ transaction: IAPTransaction) async throws {
+        switch transaction.transactionState {
+        case .purchasing:
+            // Wait for purchase completion
+            try await waitForPurchaseCompletion(transaction)
+        case .purchased:
+            // Validate receipt and finish transaction
+            try await validateAndFinishTransaction(transaction)
+        case .restored:
+            // Process restored transaction
+            try await processRestoredTransaction(transaction)
+        case .failed, .deferred:
+            // Clean up failed or deferred transactions
+            await cleanupFailedTransaction(transaction)
+        }
+    }
+    
+    private func scheduleRetry(for transaction: IAPTransaction, error: Error) async {
+        // Mark transaction for retry
+        await cache.markForRetry(transaction, error: error)
+        
+        // Send retry notification
+        NotificationCenter.default.post(
+            name: .iapTransactionRetryScheduled,
+            object: transaction,
+            userInfo: ["error": error]
+        )
+    }
+    
+    private func handlePermanentFailure(_ transaction: IAPTransaction, error: Error) async {
+        IAPLogger.error("Permanent failure for transaction \(transaction.id): \(error)")
+        
+        // Mark as permanently failed
+        await cache.markAsPermanentlyFailed(transaction, error: error)
+        
+        // Send failure notification
+        NotificationCenter.default.post(
+            name: .iapTransactionPermanentlyFailed,
+            object: transaction,
+            userInfo: ["error": error]
+        )
+    }
+}
+```
+
+### Transaction State Persistence
+
+```swift
+actor IAPCache {
+    private var pendingTransactions: [String: IAPTransaction] = [:]
+    private var retryTransactions: [String: (transaction: IAPTransaction, error: Error, retryCount: Int)] = [:]
+    private var failedTransactions: [String: (transaction: IAPTransaction, error: Error)] = [:]
+    
+    func storePendingTransaction(_ transaction: IAPTransaction) {
+        pendingTransactions[transaction.id] = transaction
+    }
+    
+    func removePendingTransaction(_ transactionID: String) {
+        pendingTransactions.removeValue(forKey: transactionID)
+        retryTransactions.removeValue(forKey: transactionID)
+    }
+    
+    func markForRetry(_ transaction: IAPTransaction, error: Error) {
+        let currentRetry = retryTransactions[transaction.id]?.retryCount ?? 0
+        retryTransactions[transaction.id] = (transaction, error, currentRetry + 1)
+    }
+    
+    func markAsPermanentlyFailed(_ transaction: IAPTransaction, error: Error) {
+        failedTransactions[transaction.id] = (transaction, error)
+        retryTransactions.removeValue(forKey: transaction.id)
+        pendingTransactions.removeValue(forKey: transaction.id)
+    }
+    
+    func getAllPendingTransactions() -> [IAPTransaction] {
+        Array(pendingTransactions.values) + retryTransactions.values.map { $0.transaction }
+    }
+}
+```
+
+## Swift Package Integration Design
+
+### Package.swift Configuration
+
+```swift
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "IAPFramework",
+    platforms: [
+        .iOS(.v13)
+    ],
+    products: [
+        .library(
+            name: "IAPFramework",
+            targets: ["IAPFramework"]
+        ),
+    ],
+    dependencies: [
+        // No external dependencies, keeping framework lightweight
+    ],
+    targets: [
+        .target(
+            name: "IAPFramework",
+            dependencies: [],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency")
+            ]
+        ),
+        .testTarget(
+            name: "IAPFrameworkTests",
+            dependencies: ["IAPFramework"]
+        ),
+    ]
+)
+```
+
+### Public API Design
+
+The framework provides a clean public interface, hiding internal complexity:
+
+```swift
+// Main entry point
+@MainActor
+public final class IAPManager: ObservableObject {
+    public static let shared = IAPManager()
+    
+    // Core functionality
+    public func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct]
+    public func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
+    public func restorePurchases() async throws -> [IAPTransaction]
+    
+    // 配置和状态
+    public func configure(with configuration: IAPConfiguration) async
+    @Published public private(set) var currentState: IAPState = .idle
+}
+
+// UIKit 和 SwiftUI 兼容性
+extension IAPManager {
+    // UIKit 友好的回调接口
+    public func loadProducts(
+        productIDs: Set<String>,
+        completion: @escaping (Result<[IAPProduct], Error>) -> Void
+    ) {
+        Task { @MainActor in
+            do {
+                let products = try await loadProducts(productIDs: productIDs)
+                completion(.success(products))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+}
+```
+
+## 平台兼容性设计
+
+### UIKit 支持
+
+```swift
+// UIKit 示例实现
+class UIKitIAPManager: NSObject {
+    private let iapManager = IAPManager.shared
+    
+    func purchaseProduct(_ product: IAPProduct, from viewController: UIViewController) {
+        Task { @MainActor in
+            do {
+                let result = try await iapManager.purchase(product)
+                await handlePurchaseResult(result, in: viewController)
+            } catch {
+                await showError(error, in: viewController)
+            }
+        }
+    }
+    
+    @MainActor
+    private func handlePurchaseResult(_ result: IAPPurchaseResult, in viewController: UIViewController) {
+        switch result {
+        case .success(let transaction):
+            showSuccessAlert(for: transaction, in: viewController)
+        case .cancelled:
+            // 用户取消，无需显示错误
+            break
+        case .failed(let error):
+            showError(error, in: viewController)
+        case .pending:
+            showPendingAlert(in: viewController)
+        }
+    }
+}
+```
+
+### SwiftUI 支持
+
+```swift
+// SwiftUI 示例实现
+@MainActor
+class SwiftUIIAPManager: ObservableObject {
+    @Published var products: [IAPProduct] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    private let iapManager = IAPManager.shared
+    
+    func loadProducts(productIDs: Set<String>) {
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let loadedProducts = try await iapManager.loadProducts(productIDs: productIDs)
+                await MainActor.run {
+                    self.products = loadedProducts
+                    self.isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                    self.isLoading = false
+                }
+            }
+        }
+    }
+    
+    func purchase(_ product: IAPProduct) {
+        Task {
+            do {
+                let result = try await iapManager.purchase(product)
+                await handlePurchaseResult(result)
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                }
+            }
         }
     }
 }
@@ -412,14 +1071,72 @@ final class TransactionRecoveryManager: Sendable {
 
 ### 缓存策略
 
-1. **商品信息缓存**: 避免重复请求商品信息
-2. **交易状态缓存**: 缓存交易状态减少查询
-3. **内存管理**: 及时释放不需要的资源
+1. **商品信息缓存**: 避免重复请求商品信息，支持缓存过期
+2. **交易状态缓存**: 缓存交易状态减少查询，提高响应速度
+3. **收据验证缓存**: 缓存验证结果，避免重复验证
+4. **内存管理**: 及时释放不需要的资源，防止内存泄漏
 
 ### 并发优化
 
-1. **Actor 隔离**: 使用 Actor 确保状态安全
+1. **Actor 隔离**: 使用 Actor 确保状态安全，避免数据竞争
 2. **任务优先级**: 为不同操作设置合适的优先级
 3. **批量操作**: 合并相似操作减少系统调用
+4. **异步流**: 使用 AsyncSequence 处理连续的交易更新
 
-这个设计文档提供了完整的架构蓝图，确保框架既能满足功能需求，又具有良好的可维护性和可测试性。
+### 启动优化
+
+```swift
+@MainActor
+final class IAPStartupManager {
+    static func initializeFramework() async {
+        // 1. 检查 StoreKit 可用性
+        guard await StoreKitAdapterFactory.createAdapter().isAvailable else {
+            IAPLogger.warning("StoreKit not available")
+            return
+        }
+        
+        // 2. 启动交易监听
+        await IAPManager.shared.startTransactionObserver()
+        
+        // 3. 恢复未完成交易（后台执行）
+        Task(priority: .background) {
+            await IAPManager.shared.recoverPendingTransactions()
+        }
+        
+        // 4. 预加载常用商品（可选）
+        if let preloadProductIDs = IAPConfiguration.current.preloadProductIDs {
+            Task(priority: .utility) {
+                try? await IAPManager.shared.loadProducts(productIDs: preloadProductIDs)
+            }
+        }
+    }
+}
+```
+
+## 设计决策说明
+
+### 1. 协议导向设计
+**决策**: 使用协议定义所有核心接口
+**理由**: 提高可测试性，支持依赖注入，便于 Mock 和单元测试
+
+### 2. Swift Concurrency 优先
+**决策**: 全面使用 async/await，启用严格并发检查
+**理由**: 现代化的异步编程模型，更好的类型安全和性能
+
+### 3. 运行时版本检测
+**决策**: 运行时检测 iOS 版本，自动选择 StoreKit API
+**理由**: 支持 iOS 13+ 的广泛兼容性，同时利用新版本的优势
+
+### 4. 单例 + 依赖注入混合模式
+**决策**: 提供单例便于使用，同时支持依赖注入用于测试
+**理由**: 平衡易用性和可测试性
+
+### 5. 零外部依赖
+**决策**: 不依赖任何第三方库
+**理由**: 减少依赖冲突，保持框架轻量化，提高稳定性
+
+### 6. 本地化优先
+**决策**: 所有用户可见消息都支持本地化
+**理由**: 提供更好的用户体验，支持国际化应用
+
+这个设计文档提供了完整的架构蓝图，确保框架既能满足所有功能需求，又具有良好的可维护性、可测试性和性能表现。

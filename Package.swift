@@ -16,9 +16,15 @@ let package = Package(
             targets: ["IAPFramework"]
         ),
     ],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0")
+    ],
     targets: [
         .target(
             name: "IAPFramework",
+            dependencies: [
+                .product(name: "Crypto", package: "swift-crypto")
+            ],
             resources: [
                 .process("Resources")
             ],

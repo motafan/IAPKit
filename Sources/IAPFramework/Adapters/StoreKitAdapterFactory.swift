@@ -1,7 +1,69 @@
 import Foundation
 import StoreKit
 
-/// StoreKit 适配器工厂
+/**
+ StoreKit 适配器工厂
+ 
+ `StoreKitAdapterFactory` 是框架跨版本兼容性的核心组件，负责在运行时检测系统版本
+ 并创建合适的 StoreKit 适配器。这个工厂模式确保了框架可以透明地支持不同版本的 StoreKit API。
+ 
+ ## 跨版本兼容性策略
+ 
+ ### 版本检测机制
+ 框架使用编译时和运行时检测相结合的方式：
+ 
+ ```swift
+ if #available(iOS 15.0, macOS 12.0, *) {
+     // 使用 StoreKit 2 适配器
+     return StoreKit2Adapter()
+ } else {
+     // 使用 StoreKit 1 适配器
+     return StoreKit1Adapter()
+ }
+ ```
+ 
+ ### StoreKit 2 优势 (iOS 15+)
+ - **现代 API**: 原生支持 async/await
+ - **类型安全**: 强类型的 Product 和 Transaction
+ - **简化错误处理**: 统一的错误类型
+ - **更好的性能**: 优化的网络请求和缓存
+ 
+ ### StoreKit 1 兼容 (iOS 13-14)
+ - **回调包装**: 使用 `withCheckedContinuation` 转换为 async/await
+ - **手动状态管理**: 实现完整的交易状态机
+ - **错误转换**: 将 SKError 转换为统一的 IAPError
+ - **内存管理**: 正确处理 delegate 和 observer 的生命周期
+ 
+ ## 适配器选择
+ 
+ ### 自动选择（推荐）
+ ```swift
+ let adapter = StoreKitAdapterFactory.createAdapter()
+ // 自动选择最佳适配器
+ ```
+ 
+ ### 强制指定（测试用）
+ ```swift
+ let adapter = StoreKitAdapterFactory.createAdapter(forceType: .storeKit1)
+ // 强制使用 StoreKit 1 适配器
+ ```
+ 
+ ## 系统兼容性检查
+ 
+ ```swift
+ let systemInfo = StoreKitAdapterFactory.systemInfo
+ print("系统: \(systemInfo.description)")
+ print("推荐适配器: \(systemInfo.recommendedAdapter)")
+ 
+ let compatibility = StoreKitAdapterFactory.validateCompatibility(for: .storeKit2)
+ if !compatibility.isCompatible {
+     print("不兼容: \(compatibility.message)")
+ }
+ ```
+ 
+ - Note: 工厂方法是线程安全的，可以在任何线程调用
+ - Important: 适配器选择在应用启动时确定，运行期间不会改变
+ */
 public struct StoreKitAdapterFactory: Sendable {
     
     /// 适配器类型枚举

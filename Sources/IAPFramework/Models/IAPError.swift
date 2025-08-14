@@ -30,6 +30,8 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
     case permissionDenied
     /// 操作超时
     case timeout
+    /// 操作被取消
+    case operationCancelled
     /// 未知错误
     case unknownError(String)
     
@@ -63,6 +65,8 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
             return IAPUserMessage.permissionDenied.localizedString
         case .timeout:
             return IAPUserMessage.timeout.localizedString
+        case .operationCancelled:
+            return IAPUserMessage.operationCancelled.localizedString
         case .unknownError(let message):
             return String(format: IAPUserMessage.unknownError.localizedString, message)
         }
@@ -84,6 +88,8 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
             return IAPUserMessage.paymentNotAllowedRecovery.localizedString
         case .timeout:
             return IAPUserMessage.timeoutRecovery.localizedString
+        case .operationCancelled:
+            return IAPUserMessage.operationCancelledRecovery.localizedString
         case .serverValidationFailed:
             return IAPUserMessage.serverValidationFailedRecovery.localizedString
         case .configurationError:
@@ -103,7 +109,8 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
              (.productNotAvailable, .productNotAvailable),
              (.invalidReceiptData, .invalidReceiptData),
              (.permissionDenied, .permissionDenied),
-             (.timeout, .timeout):
+             (.timeout, .timeout),
+             (.operationCancelled, .operationCancelled):
             return true
         case (.purchaseFailed(let lhsMessage), .purchaseFailed(let rhsMessage)):
             return lhsMessage == rhsMessage
@@ -126,7 +133,12 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
     
     /// 是否为用户取消的错误
     public var isUserCancelled: Bool {
-        return self == .purchaseCancelled
+        switch self {
+        case .purchaseCancelled, .operationCancelled:
+            return true
+        default:
+            return false
+        }
     }
     
     /// 是否为网络相关错误
@@ -152,7 +164,7 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
     /// 错误严重程度
     public var severity: ErrorSeverity {
         switch self {
-        case .purchaseCancelled:
+        case .purchaseCancelled, .operationCancelled:
             return .info
         case .networkError, .timeout, .productNotAvailable:
             return .warning
@@ -172,6 +184,8 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
             return "商品不存在，请稍后重试"
         case .purchaseCancelled:
             return "购买已取消"
+        case .operationCancelled:
+            return "操作已取消"
         case .purchaseFailed:
             return "购买失败，请检查网络连接"
         case .networkError:

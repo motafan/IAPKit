@@ -1,7 +1,54 @@
 import Foundation
 import StoreKit
 
-/// 内购商品信息
+/**
+ 内购商品信息
+ 
+ `IAPProduct` 表示 App Store 中的一个内购商品，包含了商品的所有基本信息和元数据。
+ 该结构体统一了 StoreKit 1 和 StoreKit 2 中的商品信息格式，提供了一致的访问接口。
+ 
+ ## 商品类型支持
+ 
+ - **消耗型商品**: 可以重复购买的商品（如游戏币、道具）
+ - **非消耗型商品**: 一次购买永久有效的商品（如去广告、解锁功能）
+ - **自动续费订阅**: 自动续费的订阅服务（如会员服务）
+ - **非续费订阅**: 固定期限的订阅服务（如季票）
+ 
+ ## 价格和本地化
+ 
+ 商品价格信息完全本地化，支持：
+ - 用户当前地区的货币格式
+ - 本地化的价格显示
+ - 订阅商品的介绍性价格
+ - 促销优惠价格
+ 
+ ## 使用示例
+ 
+ ```swift
+ let product: IAPProduct = // 从 loadProducts 获取
+ 
+ // 基本信息
+ print("商品名称: \(product.displayName)")
+ print("商品描述: \(product.description)")
+ print("价格: \(product.localizedPrice)")
+ 
+ // 类型检查
+ if product.isSubscription {
+     print("这是订阅商品")
+     if let subscriptionInfo = product.subscriptionInfo {
+         print("订阅周期: \(subscriptionInfo.subscriptionPeriod)")
+     }
+ }
+ 
+ // 价格比较
+ if product.hasIntroductoryPrice {
+     print("介绍价: \(product.bestLocalizedPrice)")
+ }
+ ```
+ 
+ - Note: 符合 `Sendable` 协议，可以安全地在并发环境中使用
+ - Important: 商品信息可能会发生变化，建议定期刷新
+ */
 public struct IAPProduct: Sendable, Identifiable, Equatable {
     /// 商品唯一标识符
     public let id: String

@@ -23,6 +23,18 @@
 "operation_cancelled" = "操作已取消";
 "unknown_error" = "未知错误：%@";
 
+// MARK: - Order-related Error Messages (订单相关错误消息)
+"order_creation_failed" = "订单创建失败：%@";
+"order_not_found" = "订单未找到";
+"order_expired" = "订单已过期";
+"order_already_completed" = "订单已完成";
+"order_validation_failed" = "订单验证失败";
+"server_order_mismatch" = "服务器订单信息不匹配";
+"order_creation_timeout" = "订单创建超时";
+"order_validation_timeout" = "订单验证超时";
+"order_server_unavailable" = "订单服务器暂时不可用";
+"order_data_corrupted" = "订单数据损坏或无效";
+
 // MARK: - Detailed Error Messages (详细错误消息)
 "product_load_timeout" = "商品加载超时，请检查网络连接";
 "purchase_in_progress" = "已有购买正在进行中，请稍候";
@@ -50,6 +62,10 @@
 "parental_controls_recovery" = "请联系家长批准此次购买";
 "payment_method_recovery" = "请在"设置">"Apple ID"中更新付款信息";
 "app_store_recovery" = "App Store 服务异常，请稍后重试";
+"order_creation_failed_recovery" = "请检查网络连接并重新尝试创建订单";
+"order_expired_recovery" = "订单已过期，请重新开始购买";
+"order_validation_failed_recovery" = "订单验证失败，如问题持续请联系客服";
+"order_timeout_recovery" = "订单操作超时，请检查网络连接并重试";
 
 // MARK: - Success Messages (成功消息)
 "purchase_successful" = "购买成功！";
@@ -70,6 +86,10 @@
 "finalizing_purchase" = "正在完成购买...";
 "checking_subscription" = "正在检查订阅状态...";
 "updating_entitlements" = "正在更新权限...";
+"creating_order" = "正在创建订单...";
+"validating_order" = "正在验证订单...";
+"processing_order" = "正在处理订单...";
+"syncing_order_status" = "正在同步订单状态...";
 
 // MARK: - Product Types (商品类型)
 "product_type_consumable" = "消耗型商品";
@@ -93,6 +113,13 @@
 "transaction_state_failed" = "购买失败";
 "transaction_state_restored" = "已恢复";
 "transaction_state_deferred" = "等待批准";
+
+// MARK: - Order States (订单状态)
+"order_status_created" = "已创建";
+"order_status_pending" = "处理中";
+"order_status_completed" = "已完成";
+"order_status_cancelled" = "已取消";
+"order_status_failed" = "失败";
 
 // MARK: - Buttons and Actions (按钮和操作)
 "button_retry" = "重试";

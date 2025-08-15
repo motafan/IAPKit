@@ -32,6 +32,9 @@ public final class MockReceiptValidator: ReceiptValidatorProtocol, @unchecked Se
     /// 验证的收据数据记录
     public private(set) var validatedReceiptData: [Data] = []
     
+    /// 验证的订单记录
+    public private(set) var validatedOrders: [IAPOrder] = []
+    
     // MARK: - Initialization
     
     public init() {}
@@ -59,6 +62,55 @@ public final class MockReceiptValidator: ReceiptValidatorProtocol, @unchecked Se
         return IAPReceiptValidationResult(
             isValid: true,
             transactions: [],
+            receiptCreationDate: Date(),
+            appVersion: "1.0.0",
+            originalAppVersion: "1.0.0",
+            environment: .sandbox
+        )
+    }
+    
+    public func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult {
+        incrementCallCount(for: "validateReceiptWithOrder")
+        callParameters["validateReceiptWithOrder_receiptData"] = receiptData
+        callParameters["validateReceiptWithOrder_order"] = order
+        validatedReceiptData.append(receiptData)
+        validatedOrders.append(order)
+        
+        if mockDelay > 0 {
+            try await Task.sleep(nanoseconds: UInt64(mockDelay * 1_000_000_000))
+        }
+        
+        // 检查订单状态
+        if order.isExpired && shouldThrowError {
+            throw IAPError.orderExpired
+        }
+        
+        if order.status == .completed && shouldThrowError {
+            throw IAPError.orderAlreadyCompleted
+        }
+        
+        if shouldThrowError, let error = mockError {
+            throw error
+        }
+        
+        if let result = mockValidationResult {
+            return result
+        }
+        
+        // 默认返回有效结果，包含匹配的交易
+        let matchingTransaction = IAPTransaction(
+            id: UUID().uuidString,
+            productID: order.productID,
+            purchaseDate: Date(),
+            transactionState: .purchased,
+            receiptData: receiptData,
+            originalTransactionID: nil,
+            quantity: 1
+        )
+        
+        return IAPReceiptValidationResult(
+            isValid: true,
+            transactions: [matchingTransaction],
             receiptCreationDate: Date(),
             appVersion: "1.0.0",
             originalAppVersion: "1.0.0",
@@ -114,6 +166,7 @@ public final class MockReceiptValidator: ReceiptValidatorProtocol, @unchecked Se
         callCounts.removeAll()
         callParameters.removeAll()
         validatedReceiptData.removeAll()
+        validatedOrders.removeAll()
     }
     
     /// 获取方法调用次数
@@ -153,6 +206,32 @@ public final class MockReceiptValidator: ReceiptValidatorProtocol, @unchecked Se
     /// - Returns: 调用统计
     public func getCallStatistics() -> [String: Int] {
         return callCounts
+    }
+    
+    /// 获取所有验证过的订单
+    /// - Returns: 订单列表
+    public func getAllValidatedOrders() -> [IAPOrder] {
+        return validatedOrders
+    }
+    
+    /// 获取最后验证的订单
+    /// - Returns: 订单
+    public func getLastValidatedOrder() -> IAPOrder? {
+        return validatedOrders.last
+    }
+    
+    /// 检查是否验证过特定订单
+    /// - Parameter orderID: 订单ID
+    /// - Returns: 是否验证过
+    public func wasOrderValidated(_ orderID: String) -> Bool {
+        return validatedOrders.contains { $0.id == orderID }
+    }
+    
+    /// 检查是否验证过特定商品的订单
+    /// - Parameter productID: 商品ID
+    /// - Returns: 是否验证过
+    public func wasProductOrderValidated(_ productID: String) -> Bool {
+        return validatedOrders.contains { $0.productID == productID }
     }
     
     // MARK: - Private Methods
@@ -290,5 +369,55 @@ extension MockReceiptValidator {
     /// - Parameter statusCode: HTTP 状态码
     public func configureServerValidationFailure(statusCode: Int = 500) {
         setMockError(.serverValidationFailed(statusCode: statusCode), shouldThrow: true)
+    }
+    
+    /// 配置订单过期场景
+    public func configureOrderExpired() {
+        setMockError(.orderExpired, shouldThrow: true)
+    }
+    
+    /// 配置订单已完成场景
+    public func configureOrderAlreadyCompleted() {
+        setMockError(.orderAlreadyCompleted, shouldThrow: true)
+    }
+    
+    /// 配置订单验证失败场景
+    public func configureOrderValidationFailed() {
+        setMockError(.orderValidationFailed, shouldThrow: true)
+    }
+    
+    /// 配置服务器订单不匹配场景
+    public func configureServerOrderMismatch() {
+        setMockError(.serverOrderMismatch, shouldThrow: true)
+    }
+    
+    /// 配置成功的订单验证场景
+    /// - Parameters:
+    ///   - order: 订单信息
+    ///   - environment: 收据环境
+    public func configureSuccessfulOrderValidation(
+        for order: IAPOrder,
+        environment: ReceiptEnvironment = .sandbox
+    ) {
+        let matchingTransaction = IAPTransaction(
+            id: UUID().uuidString,
+            productID: order.productID,
+            purchaseDate: Date(),
+            transactionState: .purchased,
+            receiptData: nil,
+            originalTransactionID: nil,
+            quantity: 1
+        )
+        
+        setMockValidationResult(
+            IAPReceiptValidationResult(
+                isValid: true,
+                transactions: [matchingTransaction],
+                receiptCreationDate: Date(),
+                appVersion: "1.0.0",
+                originalAppVersion: "1.0.0",
+                environment: environment
+            )
+        )
     }
 }

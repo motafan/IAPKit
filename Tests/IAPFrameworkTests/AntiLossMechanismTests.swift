@@ -1,6 +1,6 @@
+import Foundation
 import Testing
 @testable import IAPFramework
-import Foundation
 
 // MARK: - 防丢单机制测试
 

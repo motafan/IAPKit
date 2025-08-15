@@ -216,7 +216,11 @@ public final class StoreKit2Adapter: StoreKitAdapterProtocol {
                 await transaction.finish()
                 
                 let iapTransaction = convertToIAPTransaction(transaction, state: .purchased)
-                return .success(iapTransaction)
+                let placeholderOrder = IAPOrder.completed(
+                    id: UUID().uuidString,
+                    productID: transaction.productID
+                )
+                return .success(iapTransaction, placeholderOrder)
             } else if let error = verifiedResult.error {
                 throw error
             } else {
@@ -224,7 +228,12 @@ public final class StoreKit2Adapter: StoreKitAdapterProtocol {
             }
             
         case .userCancelled:
-            return .cancelled
+            let placeholderOrder = IAPOrder(
+                id: UUID().uuidString,
+                productID: product.id,
+                status: .cancelled
+            )
+            return .cancelled(placeholderOrder)
             
         case .pending:
             // 创建一个待处理的交易
@@ -234,7 +243,12 @@ public final class StoreKit2Adapter: StoreKitAdapterProtocol {
                 purchaseDate: Date(),
                 transactionState: .deferred
             )
-            return .pending(pendingTransaction)
+            let placeholderOrder = IAPOrder(
+                id: UUID().uuidString,
+                productID: product.id,
+                status: .pending
+            )
+            return .pending(pendingTransaction, placeholderOrder)
             
         @unknown default:
             throw IAPError.unknownError("Unknown purchase result")

@@ -52,6 +52,60 @@ public final class LocalReceiptValidator: ReceiptValidatorProtocol, Sendable {
         }
     }
     
+    public func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult {
+        IAPLogger.debug("LocalReceiptValidator: Starting receipt validation with order \(order.id)")
+        
+        // 基本格式验证
+        guard isReceiptFormatValid(receiptData) else {
+            IAPLogger.warning("LocalReceiptValidator: Invalid receipt format")
+            return IAPReceiptValidationResult(
+                isValid: false,
+                error: .invalidReceiptData
+            )
+        }
+        
+        // 验证订单状态
+        guard !order.isExpired else {
+            IAPLogger.warning("LocalReceiptValidator: Order \(order.id) has expired")
+            return IAPReceiptValidationResult(
+                isValid: false,
+                error: .orderExpired
+            )
+        }
+        
+        do {
+            // 解析收据内容
+            let receiptInfo = try parseReceiptData(receiptData)
+            
+            // 执行基本验证检查
+            let basicResult = try performValidationChecks(receiptInfo)
+            
+            // 执行订单相关验证
+            let orderValidationResult = try performOrderValidationChecks(receiptInfo, order: order, basicResult: basicResult)
+            
+            if orderValidationResult.isValid {
+                IAPLogger.info("LocalReceiptValidator: Receipt validation with order successful")
+            } else {
+                IAPLogger.warning("LocalReceiptValidator: Receipt validation with order failed")
+            }
+            
+            return orderValidationResult
+            
+        } catch {
+            let iapError = error as? IAPError ?? IAPError.from(error)
+            IAPLogger.logError(iapError, context: [
+                "receiptSize": String(receiptData.count),
+                "orderID": order.id,
+                "productID": order.productID
+            ])
+            
+            return IAPReceiptValidationResult(
+                isValid: false,
+                error: iapError
+            )
+        }
+    }
+    
     public func isReceiptFormatValid(_ receiptData: Data) -> Bool {
         // 基本格式检查
         guard receiptData.count > 0 else {
@@ -136,6 +190,77 @@ public final class LocalReceiptValidator: ReceiptValidatorProtocol, Sendable {
             receiptCreationDate: receiptInfo.receiptCreationDate,
             appVersion: receiptInfo.appVersion,
             originalAppVersion: receiptInfo.originalAppVersion
+        )
+    }
+    
+    /// 执行订单相关验证检查
+    /// - Parameters:
+    ///   - receiptInfo: 收据信息
+    ///   - order: 订单信息
+    ///   - basicResult: 基本验证结果
+    /// - Returns: 包含订单验证的结果
+    /// - Throws: IAPError 相关错误
+    private func performOrderValidationChecks(
+        _ receiptInfo: ReceiptInfo,
+        order: IAPOrder,
+        basicResult: IAPReceiptValidationResult
+    ) throws -> IAPReceiptValidationResult {
+        var isValid = basicResult.isValid
+        var error = basicResult.error
+        
+        // 如果基本验证已经失败，直接返回
+        guard basicResult.isValid else {
+            return basicResult
+        }
+        
+        // 验证订单状态
+        if order.isExpired {
+            IAPLogger.warning("LocalReceiptValidator: Order \(order.id) has expired")
+            isValid = false
+            error = .orderExpired
+        }
+        
+        // 验证订单是否已完成
+        if order.status == .completed {
+            IAPLogger.warning("LocalReceiptValidator: Order \(order.id) is already completed")
+            isValid = false
+            error = .orderAlreadyCompleted
+        }
+        
+        // 验证收据中是否包含对应的商品交易
+        let hasMatchingTransaction = receiptInfo.transactions.contains { transaction in
+            transaction.productID == order.productID
+        }
+        
+        if !hasMatchingTransaction {
+            IAPLogger.warning("LocalReceiptValidator: No matching transaction found for product \(order.productID) in order \(order.id)")
+            isValid = false
+            error = .orderValidationFailed
+        }
+        
+        // 验证收据创建时间是否在订单创建时间之后
+        if receiptInfo.receiptCreationDate < order.createdAt.addingTimeInterval(-60) { // 允许1分钟的时间偏差
+            IAPLogger.warning("LocalReceiptValidator: Receipt creation date is before order creation date")
+            isValid = false
+            error = .orderValidationFailed
+        }
+        
+        // 如果有过期时间，验证收据创建时间是否在过期时间之前
+        if let expiresAt = order.expiresAt,
+           receiptInfo.receiptCreationDate > expiresAt {
+            IAPLogger.warning("LocalReceiptValidator: Receipt creation date is after order expiration")
+            isValid = false
+            error = .orderExpired
+        }
+        
+        return IAPReceiptValidationResult(
+            isValid: isValid,
+            transactions: basicResult.transactions,
+            error: error,
+            receiptCreationDate: basicResult.receiptCreationDate,
+            appVersion: basicResult.appVersion,
+            originalAppVersion: basicResult.originalAppVersion,
+            environment: basicResult.environment
         )
     }
 }
@@ -246,6 +371,66 @@ public final class RemoteReceiptValidator: ReceiptValidatorProtocol, Sendable {
             IAPLogger.logError(iapError, context: [
                 "serverURL": serverURL.absoluteString,
                 "receiptSize": String(receiptData.count)
+            ])
+            throw iapError
+        }
+    }
+    
+    public func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult {
+        IAPLogger.debug("RemoteReceiptValidator: Starting remote receipt validation with order \(order.id)")
+        
+        // 基本格式验证
+        guard isReceiptFormatValid(receiptData) else {
+            throw IAPError.invalidReceiptData
+        }
+        
+        // 验证订单状态
+        guard !order.isExpired else {
+            IAPLogger.warning("RemoteReceiptValidator: Order \(order.id) has expired")
+            throw IAPError.orderExpired
+        }
+        
+        // 为订单验证生成特殊的缓存键
+        let orderCacheKey = try generateOrderCacheKey(receiptData: receiptData, order: order)
+        if let cachedResult = await cache.getCachedOrderResult(for: orderCacheKey) {
+            IAPLogger.debug("RemoteReceiptValidator: Using cached order validation result")
+            return cachedResult
+        }
+        
+        do {
+            // 构建包含订单信息的验证请求
+            let request = try buildValidationRequest(receiptData, with: order)
+            
+            // 发送验证请求
+            let (data, response) = try await urlSession.data(for: request)
+            
+            // 处理响应
+            let validationResult = try processValidationResponse(data, response: response, order: order)
+            
+            // 缓存验证结果
+            if validationResult.isValid {
+                await cache.cacheOrderResult(
+                    validationResult,
+                    for: orderCacheKey,
+                    expiration: configuration.cacheExpiration
+                )
+            }
+            
+            if validationResult.isValid {
+                IAPLogger.info("RemoteReceiptValidator: Remote validation with order successful")
+            } else {
+                IAPLogger.warning("RemoteReceiptValidator: Remote validation with order failed")
+            }
+            
+            return validationResult
+            
+        } catch {
+            let iapError = error as? IAPError ?? IAPError.from(error)
+            IAPLogger.logError(iapError, context: [
+                "serverURL": serverURL.absoluteString,
+                "receiptSize": String(receiptData.count),
+                "orderID": order.id,
+                "productID": order.productID
             ])
             throw iapError
         }
@@ -376,6 +561,84 @@ public final class RemoteReceiptValidator: ReceiptValidatorProtocol, Sendable {
         return request
     }
     
+    /// 构建包含订单信息的验证请求
+    /// - Parameters:
+    ///   - receiptData: 收据数据
+    ///   - order: 订单信息
+    /// - Returns: URL 请求
+    /// - Throws: IAPError 相关错误
+    private func buildValidationRequest(_ receiptData: Data, with order: IAPOrder) throws -> URLRequest {
+        var request = URLRequest(url: serverURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("gzip", forHTTPHeaderField: "Accept-Encoding")
+        
+        // 添加自定义请求头
+        for (key, value) in customHeaders {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+        
+        let receiptBase64 = receiptData.base64EncodedString()
+        var requestBody: [String: Any] = [
+            "receipt-data": receiptBase64,
+            "exclude-old-transactions": true
+        ]
+        
+        // 添加订单信息
+        var orderInfo: [String: Any] = [
+            "order_id": order.id,
+            "product_id": order.productID,
+            "created_at": ISO8601DateFormatter().string(from: order.createdAt),
+            "status": order.status.rawValue
+        ]
+        
+        if let serverOrderID = order.serverOrderID {
+            orderInfo["server_order_id"] = serverOrderID
+        }
+        
+        if let expiresAt = order.expiresAt {
+            orderInfo["expires_at"] = ISO8601DateFormatter().string(from: expiresAt)
+        }
+        
+        if let amount = order.amount {
+            orderInfo["amount"] = amount.description
+        }
+        
+        if let currency = order.currency {
+            orderInfo["currency"] = currency
+        }
+        
+        if let userID = order.userID {
+            orderInfo["user_id"] = userID
+        }
+        
+        if let userInfo = order.userInfo {
+            orderInfo["user_info"] = userInfo
+        }
+        
+        requestBody["order"] = orderInfo
+        
+        // 添加共享密钥（如果有）
+        if let sharedSecret = sharedSecret {
+            requestBody["password"] = sharedSecret
+        }
+        
+        // 添加设备信息（用于调试）
+        requestBody["device_info"] = [
+            "platform": "iOS",
+            "version": ProcessInfo.processInfo.operatingSystemVersionString,
+            "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody, options: [])
+        } catch {
+            throw IAPError.configurationError("Failed to serialize request body: \(error.localizedDescription)")
+        }
+        
+        return request
+    }
+    
     /// 处理验证响应
     /// - Parameters:
     ///   - data: 响应数据
@@ -439,6 +702,114 @@ public final class RemoteReceiptValidator: ReceiptValidatorProtocol, Sendable {
         }
         
         let error: IAPError? = isValid ? nil : mapStatusCodeToError(status)
+        
+        return IAPReceiptValidationResult(
+            isValid: isValid,
+            transactions: transactions,
+            error: error,
+            receiptCreationDate: receiptCreationDate,
+            appVersion: appVersion,
+            originalAppVersion: originalAppVersion,
+            environment: environment
+        )
+    }
+    
+    /// 处理包含订单信息的验证响应
+    /// - Parameters:
+    ///   - data: 响应数据
+    ///   - response: HTTP 响应
+    ///   - order: 订单信息
+    /// - Returns: 验证结果
+    /// - Throws: IAPError 相关错误
+    private func processValidationResponse(
+        _ data: Data,
+        response: URLResponse,
+        order: IAPOrder
+    ) throws -> IAPReceiptValidationResult {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw IAPError.serverValidationFailed(statusCode: 0)
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            IAPLogger.warning("RemoteReceiptValidator: HTTP error \(httpResponse.statusCode)")
+            throw IAPError.serverValidationFailed(statusCode: httpResponse.statusCode)
+        }
+        
+        // 解析 JSON 响应
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw IAPError.serverValidationFailed(statusCode: httpResponse.statusCode)
+        }
+        
+        let status = json["status"] as? Int ?? -1
+        var isValid = status == 0
+        var error: IAPError? = isValid ? nil : mapStatusCodeToError(status)
+        
+        // 解析收据信息
+        var receiptCreationDate: Date?
+        var appVersion: String?
+        var originalAppVersion: String?
+        var environment: ReceiptEnvironment?
+        var transactions: [IAPTransaction] = []
+        
+        if let receipt = json["receipt"] as? [String: Any] {
+            // 解析收据创建日期
+            if let creationDateString = receipt["creation_date"] as? String {
+                receiptCreationDate = parseDate(from: creationDateString)
+            }
+            
+            // 解析应用版本信息
+            appVersion = receipt["application_version"] as? String
+            originalAppVersion = receipt["original_application_version"] as? String
+            
+            // 解析环境信息
+            if let envString = receipt["environment"] as? String {
+                environment = ReceiptEnvironment(rawValue: envString)
+            }
+            
+            // 解析交易信息
+            if let inAppArray = receipt["in_app"] as? [[String: Any]] {
+                transactions = parseTransactions(from: inAppArray)
+            }
+        }
+        
+        // 处理沙盒环境的特殊状态码
+        if status == 21007 {
+            // 收据是沙盒收据，但发送到了生产环境
+            IAPLogger.warning("RemoteReceiptValidator: Sandbox receipt sent to production server")
+            environment = .sandbox
+        }
+        
+        // 执行订单相关验证
+        if isValid {
+            do {
+                try validateOrderReceiptMatch(order: order, transactions: transactions, receiptCreationDate: receiptCreationDate)
+            } catch let orderError as IAPError {
+                IAPLogger.warning("RemoteReceiptValidator: Order validation failed: \(orderError.localizedDescription)")
+                isValid = false
+                error = orderError
+            }
+        }
+        
+        // 检查服务器返回的订单验证结果
+        if let orderValidation = json["order_validation"] as? [String: Any] {
+            let orderValid = orderValidation["valid"] as? Bool ?? false
+            let orderError = orderValidation["error"] as? String
+            
+            if !orderValid {
+                IAPLogger.warning("RemoteReceiptValidator: Server order validation failed: \(orderError ?? "unknown")")
+                isValid = false
+                error = .orderValidationFailed
+            }
+            
+            // 检查订单匹配
+            if let serverOrderID = orderValidation["server_order_id"] as? String,
+               let expectedServerOrderID = order.serverOrderID,
+               serverOrderID != expectedServerOrderID {
+                IAPLogger.warning("RemoteReceiptValidator: Server order ID mismatch")
+                isValid = false
+                error = .serverOrderMismatch
+            }
+        }
         
         return IAPReceiptValidationResult(
             isValid: isValid,
@@ -544,6 +915,62 @@ public final class RemoteReceiptValidator: ReceiptValidatorProtocol, Sendable {
             return IAPError.serverValidationFailed(statusCode: statusCode)
         }
     }
+    
+    /// 验证订单与收据的匹配性
+    /// - Parameters:
+    ///   - order: 订单信息
+    ///   - transactions: 收据中的交易信息
+    ///   - receiptCreationDate: 收据创建日期
+    /// - Throws: IAPError 相关错误
+    private func validateOrderReceiptMatch(
+        order: IAPOrder,
+        transactions: [IAPTransaction],
+        receiptCreationDate: Date?
+    ) throws {
+        // 验证订单状态
+        if order.isExpired {
+            throw IAPError.orderExpired
+        }
+        
+        if order.status == .completed {
+            throw IAPError.orderAlreadyCompleted
+        }
+        
+        // 验证收据中是否包含对应的商品交易
+        let hasMatchingTransaction = transactions.contains { transaction in
+            transaction.productID == order.productID
+        }
+        
+        if !hasMatchingTransaction {
+            throw IAPError.orderValidationFailed
+        }
+        
+        // 验证收据创建时间
+        if let receiptDate = receiptCreationDate {
+            // 收据创建时间应该在订单创建时间之后
+            if receiptDate < order.createdAt.addingTimeInterval(-60) { // 允许1分钟的时间偏差
+                throw IAPError.orderValidationFailed
+            }
+            
+            // 如果有过期时间，收据创建时间应该在过期时间之前
+            if let expiresAt = order.expiresAt, receiptDate > expiresAt {
+                throw IAPError.orderExpired
+            }
+        }
+    }
+    
+    /// 生成订单缓存键
+    /// - Parameters:
+    ///   - receiptData: 收据数据
+    ///   - order: 订单信息
+    /// - Returns: 缓存键
+    /// - Throws: 哈希计算错误
+    private func generateOrderCacheKey(receiptData: Data, order: IAPOrder) throws -> String {
+        let receiptHash = try receiptData.sha256Hash
+        let orderHash = "\(order.id)_\(order.productID)_\(order.status.rawValue)"
+        let orderHashValue = try orderHash.sha256Hash
+        return "order_\(receiptHash)_\(orderHashValue)"
+    }
 }
 
 /// 混合收据验证器（先本地后远程）
@@ -612,6 +1039,49 @@ public final class HybridReceiptValidator: ReceiptValidatorProtocol, Sendable {
             return remoteResult
         } catch {
             IAPLogger.logError(IAPError.from(error), context: ["validationMode": "hybrid"])
+            throw error
+        }
+    }
+    
+    public func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult {
+        IAPLogger.debug("HybridReceiptValidator: Starting hybrid receipt validation with order \(order.id)")
+        
+        // 基本格式验证
+        guard isReceiptFormatValid(receiptData) else {
+            throw IAPError.invalidReceiptData
+        }
+        
+        // 验证订单状态
+        guard !order.isExpired else {
+            IAPLogger.warning("HybridReceiptValidator: Order \(order.id) has expired")
+            throw IAPError.orderExpired
+        }
+        
+        // 首先尝试本地验证
+        do {
+            let localResult = try await localValidator.validateReceipt(receiptData, with: order)
+            
+            if localResult.isValid {
+                IAPLogger.info("HybridReceiptValidator: Local validation with order successful")
+                return localResult
+            } else {
+                IAPLogger.warning("HybridReceiptValidator: Local validation with order failed, trying remote")
+            }
+        } catch {
+            IAPLogger.warning("HybridReceiptValidator: Local validation with order error: \(error.localizedDescription)")
+        }
+        
+        // 本地验证失败，尝试远程验证
+        do {
+            let remoteResult = try await remoteValidator.validateReceipt(receiptData, with: order)
+            IAPLogger.info("HybridReceiptValidator: Remote validation with order completed")
+            return remoteResult
+        } catch {
+            IAPLogger.logError(IAPError.from(error), context: [
+                "validationMode": "hybrid",
+                "orderID": order.id,
+                "productID": order.productID
+            ])
             throw error
         }
     }

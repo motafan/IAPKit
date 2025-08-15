@@ -23,6 +23,18 @@
 "operation_cancelled" = "Operation was cancelled";
 "unknown_error" = "Unknown error: %@";
 
+// MARK: - Order-related Error Messages
+"order_creation_failed" = "Order creation failed: %@";
+"order_not_found" = "Order not found";
+"order_expired" = "Order has expired";
+"order_already_completed" = "Order is already completed";
+"order_validation_failed" = "Order validation failed";
+"server_order_mismatch" = "Server order information mismatch";
+"order_creation_timeout" = "Order creation timed out";
+"order_validation_timeout" = "Order validation timed out";
+"order_server_unavailable" = "Order server is temporarily unavailable";
+"order_data_corrupted" = "Order data is corrupted or invalid";
+
 // MARK: - Detailed Error Messages
 "product_load_timeout" = "Product loading timed out, please check your connection";
 "purchase_in_progress" = "A purchase is already in progress, please wait";
@@ -50,6 +62,10 @@
 "parental_controls_recovery" = "Please ask a parent to approve this purchase";
 "payment_method_recovery" = "Please update payment information in Settings > Apple ID";
 "app_store_recovery" = "App Store service error, please try again later";
+"order_creation_failed_recovery" = "Check your internet connection and try creating the order again";
+"order_expired_recovery" = "The order has expired, please start a new purchase";
+"order_validation_failed_recovery" = "Order validation failed, please contact support if the issue persists";
+"order_timeout_recovery" = "Order operation timed out, please check your connection and retry";
 
 // MARK: - Success Messages
 "purchase_successful" = "Purchase completed successfully!";
@@ -70,6 +86,10 @@
 "finalizing_purchase" = "Finalizing purchase...";
 "checking_subscription" = "Checking subscription status...";
 "updating_entitlements" = "Updating entitlements...";
+"creating_order" = "Creating order...";
+"validating_order" = "Validating order...";
+"processing_order" = "Processing order...";
+"syncing_order_status" = "Syncing order status...";
 
 // MARK: - Product Types
 "product_type_consumable" = "Consumable";
@@ -93,6 +113,13 @@
 "transaction_state_failed" = "Failed";
 "transaction_state_restored" = "Restored";
 "transaction_state_deferred" = "Pending Approval";
+
+// MARK: - Order States
+"order_status_created" = "Created";
+"order_status_pending" = "Pending";
+"order_status_completed" = "Completed";
+"order_status_cancelled" = "Cancelled";
+"order_status_failed" = "Failed";
 
 // MARK: - Buttons and Actions
 "button_retry" = "Retry";

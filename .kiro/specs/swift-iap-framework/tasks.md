@@ -1,243 +1,213 @@
 # Implementation Plan
 
-## Status: COMPLETED ✅
+## Status: UPDATED FOR SERVER ORDER MANAGEMENT
 
-All core implementation tasks have been completed successfully. The Swift IAP Framework is now fully implemented with comprehensive functionality including:
+The Swift IAP Framework implementation needs to be updated to support server-side order management. The new purchase flow requires creating orders on the server before payment, then validating receipts with order information.
 
-### ✅ Completed Implementation
-- **Project Structure**: Package.swift configured with iOS 13+ support, Swift 6.0+, and strict concurrency
-- **Core Protocols**: IAPManagerProtocol, StoreKitAdapterProtocol, and ReceiptValidatorProtocol implemented
-- **Data Models**: Complete IAPProduct, IAPTransaction, IAPError, and supporting types
-- **StoreKit Adapters**: Both StoreKit 1 and StoreKit 2 adapters with automatic version detection
-- **Service Layer**: ProductService, PurchaseService, TransactionMonitor, and TransactionRecoveryManager
-- **Anti-Loss Mechanism**: RetryManager with exponential backoff and transaction recovery
-- **Receipt Validation**: Local and remote validation with CryptoKit integration
-- **Core Manager**: IAPManager with dependency injection and comprehensive API
-- **Platform Support**: SwiftUI and UIKit examples and integration guides
-- **Testing Infrastructure**: Complete mock classes and test utilities
-- **Documentation**: Comprehensive code documentation and usage guides
-- **Localization**: Multi-language support with proper string resources
+### 🎯 New Implementation Tasks for Server Order Management
 
-### 🔍 Potential Enhancement Areas
-
-While the core implementation is complete, here are some optional enhancements that could be considered:
-
-- [ ] 12. Performance Optimization and Monitoring
-  - [ ] 12.1 Add performance metrics collection
-    - Implement performance tracking for key operations (load, purchase, restore)
-    - Add memory usage monitoring and optimization
-    - Create performance benchmarking tools
-    - _Requirements: General performance optimization_
-
-  - [ ] 12.2 Enhanced caching strategies
-    - Implement disk-based caching for product information
-    - Add cache warming strategies for frequently accessed products
-    - Implement cache synchronization across app launches
-    - _Requirements: 1.4 (enhanced caching)_
-
-- [ ] 13. Advanced Error Recovery
-  - [ ] 13.1 Implement circuit breaker pattern
-    - Add circuit breaker for repeated failures
-    - Implement health check mechanisms
-    - Add automatic service degradation
-    - _Requirements: 5.3 (enhanced retry mechanisms)_
-
-  - [ ] 13.2 Enhanced offline support
-    - Implement offline transaction queuing
-    - Add offline product information caching
-    - Create offline-first purchase flow
-    - _Requirements: 5.1, 5.2 (enhanced anti-loss)_
-
-- [ ] 14. Developer Experience Improvements
-  - [ ] 14.1 Add debugging and diagnostic tools
-    - Create visual transaction flow debugger
-    - Add comprehensive logging dashboard
-    - Implement transaction state visualization
-    - _Requirements: 8.1, 8.2 (enhanced debugging)_
-
-  - [ ] 14.2 Enhanced testing utilities
-    - Add integration test helpers
-    - Create StoreKit testing simulator
-    - Implement automated test data generation
-    - _Requirements: 9.1, 9.2 (enhanced testing)_
-
-### 📋 Original Completed Tasks
-
-- [x] 1. 设置项目结构和核心协议
-  - 更新 Package.swift 配置，支持 iOS 13+ 和 Swift 6.0+，启用严格并发检查
-  - 创建核心协议定义文件，包括 IAPManagerProtocol 和 StoreKitAdapterProtocol
-  - 定义基础数据模型结构和枚举类型
-  - _Requirements: 1.2, 6.1, 10.1, 10.3_
-
-- [x] 2. 实现数据模型和错误处理
-  - [x] 2.1 创建核心数据模型
-    - 实现 IAPProduct、IAPTransaction、IAPPurchaseResult 等核心数据结构
-    - 确保所有模型符合 Sendable 协议要求
-    - 添加必要的 Identifiable 和 Equatable 实现
-    - _Requirements: 1.1, 6.3, 2.5_
-
-  - [x] 2.2 实现错误处理系统
-    - 创建 IAPError 枚举，实现 LocalizedError 协议
-    - 实现本地化消息系统 IAPUserMessage 和 IAPDebugMessage
-    - 创建 Localizable.strings 文件模板（中英文）
-    - _Requirements: 8.1, 8.2, 8.4_
-
-  - [x] 2.3 实现状态管理和配置模型
-    - 创建 IAPState 类管理框架状态
-    - 实现 IAPConfiguration 和 IAPCache 支持配置和缓存
-    - 添加状态变化通知机制
-    - _Requirements: 6.2, 1.4_
-
-- [x] 3. 实现 StoreKit 适配层
-  - [x] 3.1 创建 StoreKit 2 适配器（iOS 15+）
-    - 实现 StoreKit2Adapter 类，使用 StoreKit 2 的 Product 和 Transaction API
-    - 实现商品加载、购买、恢复购买功能
-    - 添加交易监听和处理逻辑
-    - _Requirements: 1.2, 2.3, 3.1_
-
-  - [x] 3.2 创建 StoreKit 1 适配器（iOS 13-14）
-    - 实现 StoreKit1Adapter 类，使用传统的 SKProductsRequest 和 SKPaymentQueue
-    - 使用 withCheckedContinuation 将回调转换为 async/await
-    - 实现 SKProductsRequestDelegate 和 SKPaymentTransactionObserver
-    - 添加完整的错误处理和状态管理
-    - _Requirements: 1.3, 2.4, 3.2_
-
-  - [x] 3.3 实现版本检测和适配器选择
-    - 创建运行时版本检测逻辑
-    - 实现适配器工厂模式，自动选择合适的 StoreKit 版本
-    - 确保版本切换的透明性
-    - _Requirements: 1.2, 1.3_
-
-- [x] 4. 实现服务层组件
-  - [x] 4.1 实现 ProductService
-    - 创建商品服务类，负责商品信息的加载和缓存
-    - 实现商品信息缓存机制，避免重复请求
-    - 添加缓存清理和更新逻辑
-    - _Requirements: 1.1, 1.4_
-
-  - [x] 4.2 实现 PurchaseService
-    - 创建购买服务类，处理所有类型的商品购买
-    - 实现购买流程的异步处理和错误处理
-    - 集成收据验证逻辑
-    - _Requirements: 2.1, 2.5, 2.6, 4.1_
-
-  - [x] 4.3 实现 TransactionMonitor
-    - 创建交易监控类，实时监听交易状态变化
-    - 实现未完成交易的自动检测和处理
-    - 添加交易状态持久化机制
-    - _Requirements: 5.1, 5.2, 5.4_
-
-- [x] 5. 实现防丢单机制
-  - [x] 5.1 创建交易恢复管理器
-    - 实现 TransactionRecoveryManager，处理应用启动时的交易恢复
-    - 添加未完成交易的检测和处理逻辑
-    - 实现交易优先级排序和批量处理
-    - _Requirements: 5.1, 5.5_
-
-  - [x] 5.2 实现重试机制
-    - 创建 RetryManager Actor，管理重试逻辑
-    - 实现指数退避算法和最大重试次数限制
-    - 添加重试状态的持久化存储
-    - _Requirements: 5.3_
-
-- [x] 6. 实现收据验证系统
-  - [x] 6.1 创建本地收据验证器
-    - 实现 LocalReceiptValidator 类，基于 ReceiptValidatorProtocol
-    - 添加收据数据的基本完整性检查和格式验证
-    - 实现收据解析和基础验证逻辑
+- [x] 1. Update Core Data Models for Order Management
+  - [x] 1.1 Create IAPOrder data model
+    - Add IAPOrder struct with id, productID, userInfo, createdAt, expiresAt, status fields
+    - Implement IAPOrderStatus enum with created, pending, completed, cancelled, failed states
+    - Add computed properties for isExpired and isActive
+    - Ensure Sendable, Identifiable, and Equatable conformance
     - _Requirements: 4.1, 4.3_
 
-  - [x] 6.2 创建远程验证扩展接口
-    - 实现 RemoteReceiptValidator 类，支持服务器验证
-    - 创建可扩展的远程验证接口和配置
-    - 添加验证结果的缓存机制
-    - _Requirements: 4.2, 4.4_
+  - [x] 1.2 Update IAPPurchaseResult to include order information
+    - Modify success and pending cases to include IAPOrder parameter
+    - Update cancelled and failed cases to optionally include IAPOrder
+    - Update all related code to handle new result structure
+    - _Requirements: 2.7, 2.9_
 
-- [x] 7. 实现核心管理类
-  - [x] 7.1 创建 IAPManager 主类
-    - 实现 IAPManager 单例类，整合所有服务组件
-    - 添加 @MainActor 标记确保 UI 线程安全
-    - 实现依赖注入支持，便于测试
-    - 集成 ProductService、PurchaseService、TransactionMonitor 等服务
-    - _Requirements: 6.2, 7.3, 9.1_
+  - [x] 1.3 Add order-related error types to IAPError
+    - Add orderCreationFailed, orderNotFound, orderExpired, orderAlreadyCompleted cases
+    - Add orderValidationFailed and serverOrderMismatch error cases
+    - Update error descriptions and localized messages
+    - _Requirements: 9.1_
 
-  - [x] 7.2 实现公共 API 接口
-    - 实现 loadProducts、purchase、restorePurchases 等核心方法
-    - 添加完整的错误处理和用户反馈
-    - 确保所有公共方法都是 async/await 形式
-    - 实现配置管理和状态监听接口
-    - _Requirements: 1.1, 2.1, 3.1, 6.1_
+- [x] 2. Create OrderService Protocol and Implementation
+  - [x] 2.1 Define OrderServiceProtocol
+    - Create protocol with createOrder, queryOrderStatus, updateOrderStatus methods
+    - Add cancelOrder, cleanupExpiredOrders, recoverPendingOrders methods
+    - Ensure all methods are async and properly handle errors
+    - _Requirements: 4.1, 4.2, 4.4_
 
-- [x] 8. 完善收据验证缓存实现
-  - [x] 8.1 集成 CryptoKit 进行安全哈希
-    - 更新 Package.swift 添加 CryptoKit 依赖
-    - 替换 ReceiptValidationCache 中的简化 SHA256 实现
-    - 使用 CryptoKit.SHA256 进行安全的哈希计算
-    - 添加哈希计算的错误处理
-    - _Requirements: 4.2, 4.4_
+  - [x] 2.2 Implement OrderService class
+    - Create OrderService class conforming to OrderServiceProtocol
+    - Implement order creation with local and server-side components
+    - Add order status querying with cache-first strategy
+    - Implement order cleanup and recovery mechanisms
+    - _Requirements: 4.1, 4.2, 4.6, 4.7_
 
-  - [x] 8.2 完善 RetryManager 的延迟机制
-    - 在 RetryManager 中集成 Task.sleep 实现真正的延迟
-    - 替换当前的简化延迟实现
-    - 实现可取消的延迟操作
-    - 添加延迟统计和监控功能
-    - _Requirements: 5.3_
+  - [x] 2.3 Add network client for server communication
+    - Create NetworkClient class for server API communication
+    - Implement order creation API calls with proper error handling
+    - Add order status query and update API methods
+    - Include retry logic and timeout handling
+    - _Requirements: 4.2, 4.6_
 
-- [x] 9. 完善测试基础设施
-  - [x] 9.1 创建完整的 Mock 测试类
-    - 创建独立的 MockStoreKitAdapter 类文件，支持所有测试场景
-    - 实现 MockProductService、MockPurchaseService 等服务层 Mock 类
-    - 创建测试数据生成工具和辅助方法
-    - 添加测试配置管理和状态验证工具
-    - _Requirements: 9.2, 9.1_
+- [x] 3. Update IAPManager for Order-Based Purchases
+  - [x] 3.1 Update IAPManagerProtocol
+    - Modify purchase method to accept optional userInfo parameter
+    - Add createOrder and queryOrderStatus methods to protocol
+    - Update validateReceipt method to accept IAPOrder parameter
+    - _Requirements: 2.2, 4.1, 5.2_
 
-  - [x] 9.2 扩展现有测试套件
-    - 为所有服务层组件添加完整的单元测试
-    - 测试 StoreKit 适配器的版本切换逻辑
-    - 添加收据验证系统的集成测试
-    - 测试错误处理和恢复机制的完整性
-    - _Requirements: 9.3, 9.4_
+  - [x] 3.2 Update IAPManager implementation
+    - Inject OrderService dependency into IAPManager
+    - Update purchase flow to create order before StoreKit payment
+    - Modify receipt validation to include order information
+    - Add order management methods to public API
+    - _Requirements: 2.2, 2.3, 2.7, 4.1, 5.2_
 
-  - [x] 9.3 完善防丢单机制测试
-    - 扩展现有的防丢单测试，覆盖更多边缘情况
-    - 测试重试机制的指数退避算法
-    - 模拟复杂的网络中断和恢复场景
-    - 验证交易优先级排序和批量处理逻辑
-    - _Requirements: 9.5, 5.1, 5.3_
+- [x] 4. Update PurchaseService for Order-Based Flow
+  - [x] 4.1 Modify PurchaseService to use OrderService
+    - Inject OrderService dependency into PurchaseService
+    - Update purchase method to create order before payment
+    - Implement order-based purchase flow with proper error handling
+    - Add order cleanup logic for failed purchases
+    - _Requirements: 2.2, 2.3, 2.10_
 
-- [x] 10. 创建平台兼容层和示例
-  - [x] 10.1 实现 SwiftUI 支持示例
-    - 创建 SwiftUI 兼容的 ObservableObject 包装器示例
-    - 实现响应式的购买状态管理示例
-    - 添加 SwiftUI 项目的完整使用示例到 Examples 工程目录
-    - 创建 SwiftUI 购买界面的完整示例
-    - _Requirements: 7.2, 7.3_
+  - [x] 4.2 Implement new purchase flow methods
+    - Create executeOrderBasedPurchase private method
+    - Add createOrderAndPurchase method for order creation and payment
+    - Implement validatePurchaseWithOrder for receipt and order validation
+    - Add order cleanup methods for failure scenarios
+    - _Requirements: 2.2, 2.3, 2.7, 2.10_
 
-  - [x] 10.2 完善 UIKit 支持示例
-    - 完善现有的 UIKit 兼容调用接口和示例代码
-    - 确保 UI 更新在主线程执行的示例
-    - 添加更多 UIKit 项目的使用场景示例
-    - 创建 UIKit 购买流程的完整示例
-    - _Requirements: 7.1, 7.3_
+  - [x] 4.3 Update product-specific purchase handlers
+    - Modify handleConsumablePurchase to work with orders
+    - Update handleNonConsumablePurchase to include order validation
+    - Modify handleSubscriptionPurchase for order-based flow
+    - _Requirements: 2.1, 2.2_
 
-- [x] 11. 完善文档和本地化
-  - [x] 11.1 添加代码注释和文档
-    - 为所有公共 API 添加详细的文档注释
-    - 解释跨版本兼容性的实现细节
-    - 说明防丢单机制的设计思路和使用方法
-    - 创建完整的 API 文档和使用指南
-    - _Requirements: 所有需求的文档化_
+- [x] 5. Update ReceiptValidator for Order Validation
+  - [x] 5.1 Update ReceiptValidatorProtocol
+    - Add validateReceipt method that accepts both receipt data and IAPOrder
+    - Keep existing methods for backward compatibility
+    - Ensure proper error handling for order validation failures
+    - _Requirements: 5.2, 5.4, 5.5_
 
-  - [x] 11.2 完善本地化支持
-    - 完善中文 Localizable.strings 文件的翻译
-    - 验证所有错误消息和用户提示的本地化
-    - 添加更多语言支持的基础结构
-    - 测试本地化消息在不同语言环境下的正确性
-    - _Requirements: 8.1, 8.2, 8.4_
+  - [x] 5.2 Update ReceiptValidator implementation
+    - Modify validation logic to include order information
+    - Add server-side validation that sends both receipt and order data
+    - Implement order-receipt matching validation
+    - Add proper error handling for mismatched orders
+    - _Requirements: 5.2, 5.4, 5.5, 5.6_
 
-  - [x] 11.3 创建 README 和使用指南
-    - 更新项目 README.md 文件，包含完整的使用说明
-    - 创建快速开始指南和最佳实践文档
-    - 添加常见问题解答和故障排除指南
-    - 包含完整的 API 参考和示例代码
-    - _Requirements: 7.4_
+- [x] 6. Update Cache System for Order Storage
+  - [x] 6.1 Extend IAPCache for order management
+    - Add order storage and retrieval methods to IAPCache
+    - Implement order expiration and cleanup logic
+    - Add methods for querying pending and expired orders
+    - Ensure thread-safe order operations
+    - _Requirements: 4.7, 6.6_
+
+  - [x] 6.2 Add order persistence mechanisms
+    - Implement order serialization and deserialization
+    - Add order state persistence across app launches
+    - Create order recovery mechanisms for app restart scenarios
+    - _Requirements: 6.1, 6.5_
+
+- [x] 7. Update Anti-Loss Mechanism for Orders
+  - [x] 7.1 Update TransactionRecoveryManager
+    - Add order recovery logic to transaction recovery process
+    - Implement order status synchronization on app startup
+    - Add order cleanup for failed or expired orders
+    - Update recovery priority to handle orders and transactions together
+    - _Requirements: 6.1, 6.6_
+
+  - [x] 7.2 Update TransactionMonitor for order tracking
+    - Add order monitoring to transaction monitoring logic
+    - Implement order-transaction association tracking
+    - Add order timeout and expiration monitoring
+    - _Requirements: 6.1, 6.5_
+
+- [x] 8. Update Error Handling and Localization
+  - [x] 8.1 Add order-related error messages
+    - Add localized strings for order creation failures
+    - Include order validation error messages
+    - Add order expiration and timeout messages
+    - Update all language files with new order-related messages
+    - _Requirements: 9.1, 9.2_
+
+  - [x] 8.2 Update error recovery suggestions
+    - Add recovery suggestions for order-related errors
+    - Include retry guidance for order creation failures
+    - Add user guidance for order validation issues
+    - _Requirements: 9.1_
+
+- [-] 9. Create Mock Classes for Order Testing
+  - [x] 9.1 Create MockOrderService
+    - Implement MockOrderService for testing order flows
+    - Add configurable responses for order creation and status queries
+    - Include error simulation for various order failure scenarios
+    - Add order state manipulation methods for testing
+    - _Requirements: 10.2, 10.4_
+
+  - [ ] 9.2 Update existing Mock classes
+    - Update MockPurchaseService to work with order-based flow
+    - Modify MockReceiptValidator to handle order validation
+    - Update MockStoreKitAdapter to support order-associated transactions
+    - _Requirements: 10.2_
+
+  - [ ] 9.3 Create order-specific test utilities
+    - Add order data generation utilities for testing
+    - Create order state verification helpers
+    - Implement order flow testing scenarios
+    - _Requirements: 10.4_
+
+- [ ] 10. Write Comprehensive Tests for Order Management
+  - [ ] 10.1 Test order creation and management
+    - Write unit tests for OrderService order creation flow
+    - Test order status querying and updating
+    - Verify order expiration and cleanup logic
+    - Test order recovery mechanisms
+    - _Requirements: 10.1, 10.4_
+
+  - [ ] 10.2 Test updated purchase flow
+    - Test complete order-based purchase flow
+    - Verify error handling for order creation failures
+    - Test purchase cancellation with order cleanup
+    - Verify receipt validation with order information
+    - _Requirements: 10.1, 10.4_
+
+  - [ ] 10.3 Test anti-loss mechanisms with orders
+    - Test order recovery on app restart
+    - Verify order-transaction association recovery
+    - Test order cleanup for failed purchases
+    - Verify order expiration handling
+    - _Requirements: 10.5_
+
+- [ ] 11. Update Examples and Documentation
+  - [ ] 11.1 Update SwiftUI examples
+    - Modify SwiftUI examples to use order-based purchase flow
+    - Add order status display in UI examples
+    - Include order management in SwiftUI reactive patterns
+    - _Requirements: 8.1, 8.4_
+
+  - [ ] 11.2 Update UIKit examples
+    - Update UIKit examples for order-based purchases
+    - Add order status tracking in UIKit examples
+    - Include order error handling in UI examples
+    - _Requirements: 8.1, 8.4_
+
+  - [ ] 11.3 Update documentation and API reference
+    - Update API documentation for order-based methods
+    - Add order management usage examples
+    - Include order-based purchase flow documentation
+    - Update troubleshooting guide for order-related issues
+    - _Requirements: All requirements documentation_
+
+### 📋 Implementation Notes
+
+This implementation plan builds upon the existing Swift IAP Framework codebase and adds server-side order management capabilities. The tasks are designed to:
+
+1. **Maintain Backward Compatibility**: Existing APIs will continue to work while new order-based APIs are added
+2. **Incremental Implementation**: Each task builds upon previous tasks and can be implemented incrementally
+3. **Comprehensive Testing**: Each major component includes corresponding test implementation
+4. **Error Handling**: Robust error handling for all order-related operations
+5. **Documentation**: Complete documentation updates for new functionality
+
+The implementation follows the established patterns in the existing codebase and maintains the same level of quality, testing, and documentation standards.

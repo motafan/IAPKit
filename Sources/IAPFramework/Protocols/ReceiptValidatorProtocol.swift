@@ -9,6 +9,14 @@ public protocol ReceiptValidatorProtocol: Sendable {
     /// - Throws: IAPError 相关错误
     func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult
     
+    /// 验证收据（包含订单信息）
+    /// - Parameters:
+    ///   - receiptData: 收据数据
+    ///   - order: 关联的订单信息
+    /// - Returns: 验证结果
+    /// - Throws: IAPError 相关错误
+    func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult
+    
     /// 检查收据格式是否有效
     /// - Parameter receiptData: 收据数据
     /// - Returns: 是否有效
@@ -102,6 +110,37 @@ public actor ReceiptValidationCache {
         let expired = cache.values.filter { $0.isExpired }.count
         return (total: total, expired: expired)
     }
+    
+    /// 获取订单相关的缓存验证结果
+    /// - Parameter cacheKey: 缓存键
+    /// - Returns: 缓存的验证结果（如果存在且未过期）
+    public func getCachedOrderResult(for cacheKey: String) -> IAPReceiptValidationResult? {
+        guard let item = cache[cacheKey], !item.isExpired else {
+            // 清除过期项
+            cache.removeValue(forKey: cacheKey)
+            return nil
+        }
+        
+        return item.result
+    }
+    
+    /// 缓存订单相关的验证结果
+    /// - Parameters:
+    ///   - result: 验证结果
+    ///   - cacheKey: 缓存键
+    ///   - expiration: 过期时间（秒）
+    public func cacheOrderResult(
+        _ result: IAPReceiptValidationResult,
+        for cacheKey: String,
+        expiration: TimeInterval
+    ) {
+        let item = CacheItem(
+            result: result,
+            timestamp: Date(),
+            expiration: expiration
+        )
+        cache[cacheKey] = item
+    }
 }
 
 // MARK: - Data Extensions
@@ -148,5 +187,17 @@ extension Data {
         }
         
         return String(format: "fallback_%016x", hashValue)
+    }
+}
+
+extension String {
+    /// 计算字符串的 SHA256 哈希值
+    /// - Returns: 十六进制格式的哈希字符串
+    /// - Throws: 哈希计算过程中的错误
+    var sha256Hash: String {
+        get throws {
+            let data = self.data(using: .utf8) ?? Data()
+            return try data.sha256Hash
+        }
     }
 }

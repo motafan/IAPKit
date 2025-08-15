@@ -96,10 +96,11 @@ public protocol IAPManagerProtocol: Sendable {
      ## 购买流程
      
      1. 验证商品可购买性
-     2. 发起 StoreKit 购买请求
-     3. 处理用户支付交互
-     4. 验证购买收据
-     5. 完成交易处理
+     2. 创建服务器端订单
+     3. 发起 StoreKit 购买请求
+     4. 处理用户支付交互
+     5. 验证购买收据和订单信息
+     6. 完成交易处理
      
      ## 防丢单保护
      
@@ -107,29 +108,32 @@ public protocol IAPManagerProtocol: Sendable {
      - 所有交易状态都会被持久化存储
      - 支持自动重试机制
      
-     - Parameter product: 要购买的商品信息
-     - Returns: 购买结果，包含交易信息或状态
+     - Parameters:
+     ///   - product: 要购买的商品信息
+     ///   - userInfo: 可选的用户信息，将与订单关联
+     - Returns: 购买结果，包含交易信息和订单信息
      - Throws: `IAPError` 相关错误
      
      ## 使用示例
      
      ```swift
      let product = products.first!
-     let result = try await manager.purchase(product)
+     let userInfo = ["userID": "12345", "campaign": "summer_sale"]
+     let result = try await manager.purchase(product, userInfo: userInfo)
      
      switch result {
-     case .success(let transaction):
-         print("Purchase successful: \(transaction.id)")
-     case .pending(let transaction):
-         print("Purchase pending approval: \(transaction.id)")
-     case .cancelled:
-         print("Purchase cancelled by user")
-     case .userCancelled:
-         print("Purchase cancelled by user")
+     case .success(let transaction, let order):
+         print("Purchase successful: \(transaction.id), Order: \(order.id)")
+     case .pending(let transaction, let order):
+         print("Purchase pending approval: \(transaction.id), Order: \(order.id)")
+     case .cancelled(let order):
+         print("Purchase cancelled by user, Order: \(order?.id ?? "none")")
+     case .failed(let error, let order):
+         print("Purchase failed: \(error), Order: \(order?.id ?? "none")")
      }
      ```
      */
-    func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
+    func purchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult
     
     /**
      恢复用户的历史购买
@@ -208,6 +212,49 @@ public protocol IAPManagerProtocol: Sendable {
     func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult
     
     /**
+     验证购买收据（包含订单信息）
+     
+     此方法验证购买收据的真实性和有效性，同时验证关联的订单信息。
+     支持本地验证和远程服务器验证两种模式。
+     
+     ## 验证类型
+     
+     - **本地验证**: 基本的收据格式和签名验证
+     - **远程验证**: 通过 Apple 服务器或自定义服务器验证，包含订单信息
+     
+     ## 订单验证
+     
+     - 验证收据与订单的关联性
+     - 检查订单状态和有效性
+     - 确保收据和订单信息匹配
+     
+     - Parameters:
+     ///   - receiptData: 要验证的收据数据
+     ///   - order: 关联的订单信息
+     - Returns: 验证结果，包含验证状态和详细信息
+     - Throws: `IAPError` 相关错误
+     
+     ## 使用示例
+     
+     ```swift
+     guard let receiptURL = Bundle.main.appStoreReceiptURL,
+           let receiptData = try? Data(contentsOf: receiptURL) else {
+         throw IAPError.invalidReceiptData
+     }
+     
+     let result = try await manager.validateReceipt(receiptData, with: order)
+     
+     if result.isValid {
+         print("Receipt and order validation successful")
+         // 处理验证成功的逻辑
+     } else {
+         print("Receipt validation failed: \(result.error?.localizedDescription ?? "Unknown error")")
+     }
+     ```
+     */
+    func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult
+    
+    /**
      开始监听交易状态变化
      
      此方法启动交易监控器，实时监听 StoreKit 交易队列的状态变化。
@@ -267,4 +314,86 @@ public protocol IAPManagerProtocol: Sendable {
      ```
      */
     func stopTransactionObserver()
+    
+    // MARK: - Order Management
+    
+    /**
+     为指定商品创建订单
+     
+     此方法在服务器端创建订单，为后续的购买流程做准备。
+     订单包含商品信息、用户信息和其他相关元数据。
+     
+     ## 订单创建流程
+     
+     1. 生成本地订单标识符
+     2. 向服务器发送订单创建请求
+     3. 接收服务器返回的订单信息
+     4. 缓存订单信息到本地
+     
+     ## 错误处理
+     
+     - 网络连接失败时会自动重试
+     - 服务器错误会返回详细的错误信息
+     - 订单创建失败不会影响后续的直接购买流程
+     
+     - Parameters:
+     ///   - product: 要创建订单的商品信息
+     ///   - userInfo: 可选的用户信息，将与订单关联
+     - Returns: 创建的订单信息，包含服务器分配的订单标识符
+     - Throws: `IAPError` 相关错误
+     
+     ## 使用示例
+     
+     ```swift
+     let product = products.first!
+     let userInfo = ["userID": "12345", "campaign": "summer_sale"]
+     let order = try await manager.createOrder(for: product, userInfo: userInfo)
+     
+     print("Order created: \(order.id), Server ID: \(order.serverOrderID ?? "none")")
+     ```
+     */
+    func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder
+    
+    /**
+     查询订单状态
+     
+     此方法查询指定订单的当前状态，支持本地缓存和服务器查询。
+     
+     ## 查询策略
+     
+     1. 首先检查本地缓存
+     2. 如果订单状态为终态，直接返回缓存结果
+     3. 如果订单状态为进行中，查询服务器获取最新状态
+     4. 更新本地缓存
+     
+     ## 状态同步
+     
+     - 自动同步服务器端的订单状态变化
+     - 处理订单过期和取消情况
+     - 支持订单状态的实时更新
+     
+     - Parameter orderID: 订单的唯一标识符
+     - Returns: 订单的当前状态
+     - Throws: `IAPError` 相关错误
+     
+     ## 使用示例
+     
+     ```swift
+     let status = try await manager.queryOrderStatus(order.id)
+     
+     switch status {
+     case .created:
+         print("Order is created and ready for payment")
+     case .pending:
+         print("Order is being processed")
+     case .completed:
+         print("Order has been completed successfully")
+     case .cancelled:
+         print("Order has been cancelled")
+     case .failed:
+         print("Order processing failed")
+     }
+     ```
+     */
+    func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus
 }

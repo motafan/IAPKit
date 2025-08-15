@@ -35,6 +35,28 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
     /// 未知错误
     case unknownError(String)
     
+    // MARK: - Order-related Errors (订单相关错误)
+    /// 订单创建失败
+    case orderCreationFailed(underlying: String)
+    /// 订单未找到
+    case orderNotFound
+    /// 订单已过期
+    case orderExpired
+    /// 订单已完成
+    case orderAlreadyCompleted
+    /// 订单验证失败
+    case orderValidationFailed
+    /// 服务器订单不匹配
+    case serverOrderMismatch
+    /// 订单创建超时
+    case orderCreationTimeout
+    /// 订单验证超时
+    case orderValidationTimeout
+    /// 订单服务器不可用
+    case orderServerUnavailable
+    /// 订单数据损坏
+    case orderDataCorrupted
+    
     public var errorDescription: String? {
         switch self {
         case .productNotFound:
@@ -69,6 +91,26 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
             return IAPUserMessage.operationCancelled.localizedString
         case .unknownError(let message):
             return String(format: IAPUserMessage.unknownError.localizedString, message)
+        case .orderCreationFailed(let underlying):
+            return String(format: IAPUserMessage.orderCreationFailed.localizedString, underlying)
+        case .orderNotFound:
+            return IAPUserMessage.orderNotFound.localizedString
+        case .orderExpired:
+            return IAPUserMessage.orderExpired.localizedString
+        case .orderAlreadyCompleted:
+            return IAPUserMessage.orderAlreadyCompleted.localizedString
+        case .orderValidationFailed:
+            return IAPUserMessage.orderValidationFailed.localizedString
+        case .serverOrderMismatch:
+            return IAPUserMessage.serverOrderMismatch.localizedString
+        case .orderCreationTimeout:
+            return IAPUserMessage.orderCreationTimeout.localizedString
+        case .orderValidationTimeout:
+            return IAPUserMessage.orderValidationTimeout.localizedString
+        case .orderServerUnavailable:
+            return IAPUserMessage.orderServerUnavailable.localizedString
+        case .orderDataCorrupted:
+            return IAPUserMessage.orderDataCorrupted.localizedString
         }
     }
     
@@ -94,6 +136,20 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
             return IAPUserMessage.serverValidationFailedRecovery.localizedString
         case .configurationError:
             return IAPUserMessage.configurationErrorRecovery.localizedString
+        case .orderCreationFailed:
+            return IAPUserMessage.orderCreationFailedRecovery.localizedString
+        case .orderNotFound, .orderAlreadyCompleted:
+            return IAPUserMessage.generalRecovery.localizedString
+        case .orderExpired:
+            return IAPUserMessage.orderExpiredRecovery.localizedString
+        case .orderValidationFailed, .serverOrderMismatch:
+            return IAPUserMessage.orderValidationFailedRecovery.localizedString
+        case .orderCreationTimeout, .orderValidationTimeout:
+            return IAPUserMessage.orderTimeoutRecovery.localizedString
+        case .orderServerUnavailable:
+            return IAPUserMessage.networkErrorRecovery.localizedString
+        case .orderDataCorrupted:
+            return IAPUserMessage.generalRecovery.localizedString
         default:
             return IAPUserMessage.generalRecovery.localizedString
         }
@@ -124,6 +180,18 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
             return lhsMessage == rhsMessage
         case (.unknownError(let lhsMessage), .unknownError(let rhsMessage)):
             return lhsMessage == rhsMessage
+        case (.orderCreationFailed(let lhsMessage), .orderCreationFailed(let rhsMessage)):
+            return lhsMessage == rhsMessage
+        case (.orderNotFound, .orderNotFound),
+             (.orderExpired, .orderExpired),
+             (.orderAlreadyCompleted, .orderAlreadyCompleted),
+             (.orderValidationFailed, .orderValidationFailed),
+             (.serverOrderMismatch, .serverOrderMismatch),
+             (.orderCreationTimeout, .orderCreationTimeout),
+             (.orderValidationTimeout, .orderValidationTimeout),
+             (.orderServerUnavailable, .orderServerUnavailable),
+             (.orderDataCorrupted, .orderDataCorrupted):
+            return true
         default:
             return false
         }
@@ -154,7 +222,7 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
     /// 是否为可重试的错误
     public var isRetryable: Bool {
         switch self {
-        case .networkError, .timeout, .serverValidationFailed, .transactionProcessingFailed:
+        case .networkError, .timeout, .serverValidationFailed, .transactionProcessingFailed, .orderCreationFailed, .orderValidationFailed, .orderCreationTimeout, .orderValidationTimeout, .orderServerUnavailable:
             return true
         default:
             return false
@@ -170,7 +238,15 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
             return .warning
         case .paymentNotAllowed, .permissionDenied, .configurationError:
             return .error
-        case .receiptValidationFailed, .invalidReceiptData, .serverValidationFailed:
+        case .receiptValidationFailed, .invalidReceiptData, .serverValidationFailed, .orderValidationFailed, .serverOrderMismatch:
+            return .critical
+        case .orderCreationFailed, .orderCreationTimeout:
+            return .error
+        case .orderNotFound, .orderExpired, .orderAlreadyCompleted:
+            return .warning
+        case .orderValidationTimeout, .orderServerUnavailable:
+            return .warning
+        case .orderDataCorrupted:
             return .critical
         default:
             return .error
@@ -210,6 +286,26 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
             return "配置错误，请联系开发者"
         case .permissionDenied:
             return "权限被拒绝，请检查设置"
+        case .orderCreationFailed:
+            return "订单创建失败，请检查网络连接"
+        case .orderNotFound:
+            return "订单不存在，请重新购买"
+        case .orderExpired:
+            return "订单已过期，请重新购买"
+        case .orderAlreadyCompleted:
+            return "订单已完成，无需重复操作"
+        case .orderValidationFailed:
+            return "订单验证失败，请联系客服"
+        case .serverOrderMismatch:
+            return "订单信息不匹配，请联系客服"
+        case .orderCreationTimeout:
+            return "订单创建超时，请重试"
+        case .orderValidationTimeout:
+            return "订单验证超时，请重试"
+        case .orderServerUnavailable:
+            return "订单服务器不可用，请稍后重试"
+        case .orderDataCorrupted:
+            return "订单数据损坏，请联系客服"
         default:
             return "发生未知错误，请重试"
         }

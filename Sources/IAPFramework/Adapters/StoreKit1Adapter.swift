@@ -479,7 +479,11 @@ private final class TransactionObserver: NSObject, SKPaymentTransactionObserver,
             IAPLogger.info("StoreKit 1: Transaction purchased: \(transaction.payment.productIdentifier)")
             
             if transaction.payment.productIdentifier == currentPurchaseProductID {
-                purchaseCompletion?(.success(.success(iapTransaction)))
+                let placeholderOrder = IAPOrder.completed(
+                    id: UUID().uuidString,
+                    productID: transaction.payment.productIdentifier
+                )
+                purchaseCompletion?(.success(.success(iapTransaction, placeholderOrder)))
                 cleanupPurchase()
             }
             
@@ -501,7 +505,12 @@ private final class TransactionObserver: NSObject, SKPaymentTransactionObserver,
             
             if transaction.payment.productIdentifier == currentPurchaseProductID {
                 if error.isUserCancelled {
-                    purchaseCompletion?(.success(.cancelled))
+                    let placeholderOrder = IAPOrder(
+                        id: UUID().uuidString,
+                        productID: transaction.payment.productIdentifier,
+                        status: .cancelled
+                    )
+                    purchaseCompletion?(.success(.cancelled(placeholderOrder)))
                 } else {
                     purchaseCompletion?(.failure(error))
                 }
@@ -526,7 +535,12 @@ private final class TransactionObserver: NSObject, SKPaymentTransactionObserver,
             IAPLogger.info("StoreKit 1: Transaction deferred: \(transaction.payment.productIdentifier)")
             
             if transaction.payment.productIdentifier == currentPurchaseProductID {
-                purchaseCompletion?(.success(.pending(iapTransaction)))
+                let placeholderOrder = IAPOrder(
+                    id: UUID().uuidString,
+                    productID: transaction.payment.productIdentifier,
+                    status: .pending
+                )
+                purchaseCompletion?(.success(.pending(iapTransaction, placeholderOrder)))
                 cleanupPurchase()
             }
             

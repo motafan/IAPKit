@@ -40,6 +40,10 @@ Swift IAP Framework is a modern in-app purchase framework designed to provide co
 │  │   Product    │ │  Purchase    │ │   Transaction       │  │
 │  │   Service    │ │   Service    │ │   Monitor           │  │
 │  └──────────────┘ └──────────────┘ └─────────────────────┘  │
+│  ┌──────────────┐ ┌──────────────┐                        │
+│  │    Order     │ │   Receipt    │                        │
+│  │   Service    │ │  Validator   │                        │
+│  └──────────────┘ └──────────────┘                        │
 └─────────────────────────────────────────────────────────────┘
                               │
 ┌─────────────────────────────────────────────────────────────┐
@@ -57,6 +61,13 @@ Swift IAP Framework is a modern in-app purchase framework designed to provide co
 │  │    StoreKit 2    │    │      StoreKit 1              │   │
 │  │   (iOS 15+)      │    │     (iOS 13-14)              │   │
 │  └──────────────────┘    └──────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │              Server API Layer                          │ │
+│  │  ┌─────────────────┐    ┌─────────────────────────────┐ │ │
+│  │  │  Order Creation │    │   Receipt Validation       │ │ │
+│  │  │     API         │    │        API                 │ │ │
+│  │  └─────────────────┘    └─────────────────────────────┘ │ │
+│  └─────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -68,16 +79,22 @@ graph TB
     A --> C[PurchaseService]
     A --> D[TransactionMonitor]
     A --> E[ReceiptValidator]
+    A --> F[OrderService]
     
-    B --> F[StoreKitAdapter]
+    B --> G[StoreKitAdapter]
+    C --> G
     C --> F
-    D --> F
+    C --> E
+    D --> G
     
-    F --> G[StoreKit2Adapter]
-    F --> H[StoreKit1Adapter]
+    F --> H[Server API]
+    E --> H
     
-    G --> I[StoreKit 2 APIs]
-    H --> J[StoreKit 1 APIs]
+    G --> I[StoreKit2Adapter]
+    G --> J[StoreKit1Adapter]
+    
+    I --> K[StoreKit 2 APIs]
+    J --> L[StoreKit 1 APIs]
 ```
 
 ## Components and Interfaces
@@ -89,9 +106,13 @@ graph TB
 @MainActor
 protocol IAPManagerProtocol: Sendable {
     func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct]
-    func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
+    func purchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult
     func restorePurchases() async throws -> [IAPTransaction]
-    func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult
+    func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult
+    
+    // Order management
+    func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder
+    func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus
     
     // Configuration and state management
     func configure(with configuration: IAPConfiguration) async
@@ -118,7 +139,22 @@ protocol StoreKitAdapterProtocol: Sendable {
 ```swift
 protocol ReceiptValidatorProtocol: Sendable {
     func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult
+    func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult
     func validateReceipt(_ receiptData: Data, remotely: Bool) async throws -> IAPReceiptValidationResult
+}
+```
+
+#### OrderServiceProtocol
+```swift
+protocol OrderServiceProtocol: Sendable {
+    func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder
+    func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus
+    func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) async throws
+    func cancelOrder(_ orderID: String) async throws
+    
+    // Order cleanup and recovery
+    func cleanupExpiredOrders() async throws
+    func recoverPendingOrders() async throws -> [IAPOrder]
 }
 ```
 
@@ -190,10 +226,58 @@ enum IAPTransactionState: Sendable, Equatable {
 }
 
 enum IAPPurchaseResult: Sendable, Equatable {
-    case success(IAPTransaction)
-    case pending(IAPTransaction)
-    case cancelled
-    case failed(IAPError)
+    case success(IAPTransaction, IAPOrder)
+    case pending(IAPTransaction, IAPOrder)
+    case cancelled(IAPOrder?)
+    case failed(IAPError, IAPOrder?)
+}
+
+#### IAPOrder
+```swift
+struct IAPOrder: Sendable, Identifiable, Equatable {
+    let id: String
+    let productID: String
+    let userInfo: [String: Any]?
+    let createdAt: Date
+    let expiresAt: Date?
+    let status: IAPOrderStatus
+    let serverOrderID: String?
+    
+    // Order metadata
+    let amount: Decimal?
+    let currency: String?
+    let userID: String?
+    
+    var isExpired: Bool {
+        guard let expiresAt = expiresAt else { return false }
+        return Date() > expiresAt
+    }
+    
+    var isActive: Bool {
+        switch status {
+        case .created, .pending:
+            return !isExpired
+        case .completed, .cancelled, .failed:
+            return false
+        }
+    }
+}
+
+enum IAPOrderStatus: String, Sendable, CaseIterable {
+    case created = "created"
+    case pending = "pending"
+    case completed = "completed"
+    case cancelled = "cancelled"
+    case failed = "failed"
+    
+    var isTerminal: Bool {
+        switch self {
+        case .completed, .cancelled, .failed:
+            return true
+        case .created, .pending:
+            return false
+        }
+    }
 }
 ```
 
@@ -219,21 +303,120 @@ final class ProductService: Sendable {
 ```
 
 #### PurchaseService
-Handles purchase flows for all product types:
+Handles purchase flows for all product types with server-side order management:
 ```swift
 @MainActor
 final class PurchaseService: Sendable {
     private let adapter: StoreKitAdapterProtocol
     private let validator: ReceiptValidatorProtocol
+    private let orderService: OrderServiceProtocol
     private let retryManager: RetryManager
     
-    func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
+    func purchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult
     func restorePurchases() async throws -> [IAPTransaction]
     
+    // New order-based purchase flow
+    private func executeOrderBasedPurchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult
+    private func createOrderAndPurchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> (IAPOrder, IAPTransaction)
+    private func validatePurchaseWithOrder(_ transaction: IAPTransaction, order: IAPOrder) async throws -> IAPPurchaseResult
+    
     // Support for purchase handling of different product types
-    private func handleConsumablePurchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
-    private func handleNonConsumablePurchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
-    private func handleSubscriptionPurchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
+    private func handleConsumablePurchase(_ product: IAPProduct, order: IAPOrder) async throws -> IAPPurchaseResult
+    private func handleNonConsumablePurchase(_ product: IAPProduct, order: IAPOrder) async throws -> IAPPurchaseResult
+    private func handleSubscriptionPurchase(_ product: IAPProduct, order: IAPOrder) async throws -> IAPPurchaseResult
+    
+    // Order cleanup and error handling
+    private func handlePurchaseFailure(_ error: Error, order: IAPOrder?) async
+    private func cleanupFailedOrder(_ order: IAPOrder) async
+}
+```
+
+#### OrderService
+Manages server-side order creation and tracking:
+```swift
+@MainActor
+final class OrderService: OrderServiceProtocol {
+    private let networkClient: NetworkClient
+    private let cache: IAPCache
+    private let retryManager: RetryManager
+    
+    func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder {
+        // 1. Create local order record
+        let localOrder = createLocalOrder(for: product, userInfo: userInfo)
+        
+        // 2. Send order creation request to server
+        let serverResponse = try await sendOrderCreationRequest(localOrder)
+        
+        // 3. Update local order with server response
+        let finalOrder = updateOrderWithServerResponse(localOrder, response: serverResponse)
+        
+        // 4. Cache the order
+        await cache.storeOrder(finalOrder)
+        
+        return finalOrder
+    }
+    
+    func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus {
+        // First check local cache
+        if let cachedOrder = await cache.getOrder(orderID) {
+            // If order is terminal, return cached status
+            if cachedOrder.status.isTerminal {
+                return cachedOrder.status
+            }
+        }
+        
+        // Query server for latest status
+        let serverStatus = try await queryServerOrderStatus(orderID)
+        
+        // Update local cache
+        await cache.updateOrderStatus(orderID, status: serverStatus)
+        
+        return serverStatus
+    }
+    
+    func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) async throws {
+        try await sendOrderStatusUpdate(orderID, status: status)
+        await cache.updateOrderStatus(orderID, status: status)
+    }
+    
+    func cancelOrder(_ orderID: String) async throws {
+        try await updateOrderStatus(orderID, status: .cancelled)
+    }
+    
+    func cleanupExpiredOrders() async throws {
+        let expiredOrders = await cache.getExpiredOrders()
+        for order in expiredOrders {
+            try await cancelOrder(order.id)
+            await cache.removeOrder(order.id)
+        }
+    }
+    
+    func recoverPendingOrders() async throws -> [IAPOrder] {
+        let pendingOrders = await cache.getPendingOrders()
+        var recoveredOrders: [IAPOrder] = []
+        
+        for order in pendingOrders {
+            do {
+                let currentStatus = try await queryOrderStatus(order.id)
+                if currentStatus != order.status {
+                    let updatedOrder = order.withStatus(currentStatus)
+                    await cache.storeOrder(updatedOrder)
+                    recoveredOrders.append(updatedOrder)
+                }
+            } catch {
+                IAPLogger.debug("Failed to recover order \(order.id): \(error)")
+            }
+        }
+        
+        return recoveredOrders
+    }
+    
+    // Private helper methods
+    private func createLocalOrder(for product: IAPProduct, userInfo: [String: Any]?) -> IAPOrder
+    private func sendOrderCreationRequest(_ order: IAPOrder) async throws -> OrderCreationResponse
+    private func updateOrderWithServerResponse(_ order: IAPOrder, response: OrderCreationResponse) -> IAPOrder
+    private func queryServerOrderStatus(_ orderID: String) async throws -> IAPOrderStatus
+    private func sendOrderStatusUpdate(_ orderID: String, status: IAPOrderStatus) async throws
 }
 ```
 
@@ -451,6 +634,14 @@ enum IAPError: LocalizedError, Sendable, Equatable {
     case configurationError
     case unknownError
     
+    // Order-related errors
+    case orderCreationFailed(underlying: String)
+    case orderNotFound
+    case orderExpired
+    case orderAlreadyCompleted
+    case orderValidationFailed
+    case serverOrderMismatch
+    
     var errorDescription: String? {
         switch self {
         case .productNotFound:
@@ -473,6 +664,18 @@ enum IAPError: LocalizedError, Sendable, Equatable {
             return IAPUserMessage.configurationError.localizedString
         case .unknownError:
             return IAPUserMessage.unknownError.localizedString
+        case .orderCreationFailed:
+            return IAPUserMessage.orderCreationFailed.localizedString
+        case .orderNotFound:
+            return IAPUserMessage.orderNotFound.localizedString
+        case .orderExpired:
+            return IAPUserMessage.orderExpired.localizedString
+        case .orderAlreadyCompleted:
+            return IAPUserMessage.orderAlreadyCompleted.localizedString
+        case .orderValidationFailed:
+            return IAPUserMessage.orderValidationFailed.localizedString
+        case .serverOrderMismatch:
+            return IAPUserMessage.serverOrderMismatch.localizedString
         }
     }
     
@@ -543,6 +746,14 @@ enum IAPUserMessage: String, CaseIterable {
     case transactionNotFound = "transaction_not_found"
     case configurationError = "configuration_error"
     case unknownError = "unknown_error"
+    
+    // Order-related messages
+    case orderCreationFailed = "order_creation_failed"
+    case orderNotFound = "order_not_found"
+    case orderExpired = "order_expired"
+    case orderAlreadyCompleted = "order_already_completed"
+    case orderValidationFailed = "order_validation_failed"
+    case serverOrderMismatch = "server_order_mismatch"
     
     var localizedString: String {
         NSLocalizedString(self.rawValue, bundle: .module, comment: "")
@@ -773,12 +984,15 @@ final class TransactionRecoveryManager: Sendable {
     private let cache: IAPCache
     
     func recoverPendingTransactions() async {
-        IAPLogger.debug("Starting transaction recovery process")
+        IAPLogger.debug("Starting transaction and order recovery process")
         
-        // 1. Get all unfinished transactions
+        // 1. First recover pending orders
+        await recoverPendingOrders()
+        
+        // 2. Get all unfinished transactions
         let pendingTransactions = await getPendingTransactions()
         
-        // 2. Sort by priority (purchasing transactions have highest priority)
+        // 3. Sort by priority (purchasing transactions have highest priority)
         let sortedTransactions = pendingTransactions.sorted { 
             if $0.priority != $1.priority {
                 return $0.priority > $1.priority
@@ -788,10 +1002,37 @@ final class TransactionRecoveryManager: Sendable {
         
         IAPLogger.debug("Found \(sortedTransactions.count) pending transactions")
         
-        // 3. Process one by one
+        // 4. Process one by one
         for transaction in sortedTransactions {
             await processTransaction(transaction)
         }
+    }
+    
+    private func recoverPendingOrders() async {
+        do {
+            let recoveredOrders = try await orderService.recoverPendingOrders()
+            IAPLogger.debug("Recovered \(recoveredOrders.count) pending orders")
+            
+            // Handle orders that need cleanup
+            for order in recoveredOrders {
+                if order.status.isTerminal && order.status != .completed {
+                    await handleFailedOrder(order)
+                }
+            }
+        } catch {
+            IAPLogger.debug("Failed to recover pending orders: \(error)")
+        }
+    }
+    
+    private func handleFailedOrder(_ order: IAPOrder) async {
+        // Clean up failed orders and notify if needed
+        await cache.removeOrder(order.id)
+        
+        // Send notification about failed order
+        NotificationCenter.default.post(
+            name: .iapOrderRecoveryFailed,
+            object: order
+        )
     }
     
     private func processTransaction(_ transaction: IAPTransaction) async {

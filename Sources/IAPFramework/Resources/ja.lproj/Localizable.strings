@@ -23,6 +23,18 @@
 "operation_cancelled" = "操作がキャンセルされました";
 "unknown_error" = "不明なエラー：%@";
 
+// MARK: - Order-related Error Messages (注文関連エラーメッセージ)
+"order_creation_failed" = "注文作成に失敗しました：%@";
+"order_not_found" = "注文が見つかりません";
+"order_expired" = "注文の有効期限が切れています";
+"order_already_completed" = "注文は既に完了しています";
+"order_validation_failed" = "注文の検証に失敗しました";
+"server_order_mismatch" = "サーバー注文情報が一致しません";
+"order_creation_timeout" = "注文作成がタイムアウトしました";
+"order_validation_timeout" = "注文検証がタイムアウトしました";
+"order_server_unavailable" = "注文サーバーが一時的に利用できません";
+"order_data_corrupted" = "注文データが破損または無効です";
+
 // MARK: - Detailed Error Messages (詳細エラーメッセージ)
 "product_load_timeout" = "商品の読み込みがタイムアウトしました。接続を確認してください";
 "purchase_in_progress" = "購入処理中です。しばらくお待ちください";
@@ -50,6 +62,10 @@
 "parental_controls_recovery" = "この購入について保護者の承認を求めてください";
 "payment_method_recovery" = "設定 > Apple IDで支払い情報を更新してください";
 "app_store_recovery" = "App Storeサービスエラーです。後でもう一度お試しください";
+"order_creation_failed_recovery" = "インターネット接続を確認して注文の作成を再試行してください";
+"order_expired_recovery" = "注文の有効期限が切れました。新しい購入を開始してください";
+"order_validation_failed_recovery" = "注文の検証に失敗しました。問題が続く場合はサポートにお問い合わせください";
+"order_timeout_recovery" = "注文操作がタイムアウトしました。接続を確認して再試行してください";
 
 // MARK: - Success Messages (成功メッセージ)
 "purchase_successful" = "購入が正常に完了しました！";
@@ -70,6 +86,10 @@
 "finalizing_purchase" = "購入を完了中...";
 "checking_subscription" = "サブスクリプション状態を確認中...";
 "updating_entitlements" = "権限を更新中...";
+"creating_order" = "注文を作成中...";
+"validating_order" = "注文を検証中...";
+"processing_order" = "注文を処理中...";
+"syncing_order_status" = "注文状態を同期中...";
 
 // MARK: - Product Types (商品タイプ)
 "product_type_consumable" = "消費型";
@@ -93,6 +113,13 @@
 "transaction_state_failed" = "失敗";
 "transaction_state_restored" = "復元済み";
 "transaction_state_deferred" = "承認待ち";
+
+// MARK: - Order States (注文状態)
+"order_status_created" = "作成済み";
+"order_status_pending" = "処理中";
+"order_status_completed" = "完了";
+"order_status_cancelled" = "キャンセル";
+"order_status_failed" = "失敗";
 
 // MARK: - Buttons and Actions (ボタンとアクション)
 "button_retry" = "再試行";

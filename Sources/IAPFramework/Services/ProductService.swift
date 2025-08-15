@@ -99,6 +99,11 @@ public final class ProductService: Sendable {
     /// 商品缓存
     private let cache: IAPProductCache
     
+    /// 获取缓存实例（用于内部组件访问）
+    internal var cacheInstance: IAPCache {
+        return cache
+    }
+    
     /// 配置信息
     private let configuration: IAPConfiguration
     

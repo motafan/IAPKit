@@ -1,6 +1,6 @@
+import Foundation
 import Testing
 @testable import IAPFramework
-import Foundation
 
 // MARK: - 增强的防丢单机制测试
 

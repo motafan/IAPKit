@@ -23,6 +23,9 @@ public struct IAPConfiguration: Sendable {
     /// 收据验证配置
     public let receiptValidation: ReceiptValidationConfiguration
     
+    /// 网络配置
+    public let networkConfiguration: NetworkConfiguration
+    
     public init(
         enableDebugLogging: Bool = false,
         autoFinishTransactions: Bool = true,
@@ -30,7 +33,8 @@ public struct IAPConfiguration: Sendable {
         baseRetryDelay: TimeInterval = 1.0,
         productCacheExpiration: TimeInterval = 300, // 5 minutes
         autoRecoverTransactions: Bool = true,
-        receiptValidation: ReceiptValidationConfiguration = .default
+        receiptValidation: ReceiptValidationConfiguration = .default,
+        networkConfiguration: NetworkConfiguration = .default
     ) {
         self.enableDebugLogging = enableDebugLogging
         self.autoFinishTransactions = autoFinishTransactions
@@ -39,6 +43,7 @@ public struct IAPConfiguration: Sendable {
         self.productCacheExpiration = productCacheExpiration
         self.autoRecoverTransactions = autoRecoverTransactions
         self.receiptValidation = receiptValidation
+        self.networkConfiguration = networkConfiguration
     }
     
     /// 默认配置
@@ -171,4 +176,34 @@ public struct IAPPurchaseOptions: Sendable {
     
     /// 默认购买选项
     public static let `default` = IAPPurchaseOptions()
+}
+
+/// 网络配置
+public struct NetworkConfiguration: Sendable {
+    /// 服务器基础 URL
+    public let baseURL: URL
+    
+    /// 请求超时时间（秒）
+    public let timeout: TimeInterval
+    
+    /// 最大重试次数
+    public let maxRetryAttempts: Int
+    
+    /// 重试基础延迟时间（秒）
+    public let baseRetryDelay: TimeInterval
+    
+    public init(
+        baseURL: URL = URL(string: "https://api.example.com")!,
+        timeout: TimeInterval = 30.0,
+        maxRetryAttempts: Int = 3,
+        baseRetryDelay: TimeInterval = 1.0
+    ) {
+        self.baseURL = baseURL
+        self.timeout = timeout
+        self.maxRetryAttempts = maxRetryAttempts
+        self.baseRetryDelay = baseRetryDelay
+    }
+    
+    /// 默认网络配置
+    public static let `default` = NetworkConfiguration()
 }

@@ -72,6 +72,18 @@ public enum IAPUserMessage: String, CaseIterable, Sendable {
     case operationCancelled = "operation_cancelled"
     case unknownError = "unknown_error"
     
+    // MARK: - Order-related Error Messages (订单相关错误消息)
+    case orderCreationFailed = "order_creation_failed"
+    case orderNotFound = "order_not_found"
+    case orderExpired = "order_expired"
+    case orderAlreadyCompleted = "order_already_completed"
+    case orderValidationFailed = "order_validation_failed"
+    case serverOrderMismatch = "server_order_mismatch"
+    case orderCreationTimeout = "order_creation_timeout"
+    case orderValidationTimeout = "order_validation_timeout"
+    case orderServerUnavailable = "order_server_unavailable"
+    case orderDataCorrupted = "order_data_corrupted"
+    
     // MARK: - Detailed Error Messages (详细错误消息)
     case productLoadTimeout = "product_load_timeout"
     case purchaseInProgress = "purchase_in_progress"
@@ -99,6 +111,10 @@ public enum IAPUserMessage: String, CaseIterable, Sendable {
     case parentalControlsRecovery = "parental_controls_recovery"
     case paymentMethodRecovery = "payment_method_recovery"
     case appStoreRecovery = "app_store_recovery"
+    case orderCreationFailedRecovery = "order_creation_failed_recovery"
+    case orderExpiredRecovery = "order_expired_recovery"
+    case orderValidationFailedRecovery = "order_validation_failed_recovery"
+    case orderTimeoutRecovery = "order_timeout_recovery"
     
     // MARK: - Success Messages (成功消息)
     case purchaseSuccessful = "purchase_successful"
@@ -119,6 +135,10 @@ public enum IAPUserMessage: String, CaseIterable, Sendable {
     case finalizingPurchase = "finalizing_purchase"
     case checkingSubscription = "checking_subscription"
     case updatingEntitlements = "updating_entitlements"
+    case creatingOrder = "creating_order"
+    case validatingOrder = "validating_order"
+    case processingOrder = "processing_order"
+    case syncingOrderStatus = "syncing_order_status"
     
     // MARK: - Product Types (商品类型)
     case productTypeConsumable = "product_type_consumable"
@@ -142,6 +162,13 @@ public enum IAPUserMessage: String, CaseIterable, Sendable {
     case transactionStateFailed = "transaction_state_failed"
     case transactionStateRestored = "transaction_state_restored"
     case transactionStateDeferred = "transaction_state_deferred"
+    
+    // MARK: - Order States (订单状态)
+    case orderStatusCreated = "order_status_created"
+    case orderStatusPending = "order_status_pending"
+    case orderStatusCompleted = "order_status_completed"
+    case orderStatusCancelled = "order_status_cancelled"
+    case orderStatusFailed = "order_status_failed"
     
     // MARK: - Buttons and Actions (按钮和操作)
     case buttonRetry = "button_retry"
@@ -265,6 +292,26 @@ public enum IAPUserMessage: String, CaseIterable, Sendable {
             return .paymentMethodRecovery
         case .appStoreUnavailable:
             return .appStoreRecovery
+        case .orderCreationFailed:
+            return .orderCreationFailedRecovery
+        case .orderNotFound:
+            return .generalRecovery
+        case .orderExpired:
+            return .orderExpiredRecovery
+        case .orderAlreadyCompleted:
+            return .generalRecovery
+        case .orderValidationFailed:
+            return .orderValidationFailedRecovery
+        case .serverOrderMismatch:
+            return .serverValidationFailedRecovery
+        case .orderCreationTimeout:
+            return .orderTimeoutRecovery
+        case .orderValidationTimeout:
+            return .orderTimeoutRecovery
+        case .orderServerUnavailable:
+            return .networkErrorRecovery
+        case .orderDataCorrupted:
+            return .generalRecovery
         default:
             return .generalRecovery
         }

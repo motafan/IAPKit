@@ -1,6 +1,6 @@
+import Foundation
 import Testing
 @testable import IAPFramework
-import Foundation
 
 // MARK: - 网络中断和恢复场景测试
 

@@ -117,6 +117,9 @@ public final class IAPManager: IAPManagerProtocol {
     /// 收据验证器
     private let receiptValidator: ReceiptValidatorProtocol
     
+    /// 订单服务
+    private let orderService: OrderServiceProtocol
+    
     /// 状态管理器
     private let state: IAPState
     
@@ -156,6 +159,10 @@ public final class IAPManager: IAPManagerProtocol {
         // 创建收据验证器
         self.receiptValidator = LocalReceiptValidator(configuration: configuration.receiptValidation)
         
+        // 创建订单服务
+        let networkClient = NetworkClient(configuration: configuration.networkConfiguration)
+        self.orderService = OrderService(networkClient: networkClient)
+        
         // 创建状态管理器
         self.state = IAPState()
         
@@ -168,16 +175,21 @@ public final class IAPManager: IAPManagerProtocol {
         self.purchaseService = PurchaseService(
             adapter: adapter,
             receiptValidator: receiptValidator,
+            orderService: orderService,
             configuration: configuration
         )
         
         self.transactionMonitor = TransactionMonitor(
             adapter: adapter,
+            orderService: orderService,
+            cache: productService.cacheInstance,
             configuration: configuration
         )
         
         self.recoveryManager = TransactionRecoveryManager(
             adapter: adapter,
+            orderService: orderService,
+            cache: productService.cacheInstance,
             configuration: configuration,
             stateManager: state
         )
@@ -190,10 +202,12 @@ public final class IAPManager: IAPManagerProtocol {
     ///   - configuration: 自定义配置
     ///   - adapter: 自定义适配器（可选，用于测试）
     ///   - receiptValidator: 自定义收据验证器（可选，用于测试）
+    ///   - orderService: 自定义订单服务（可选，用于测试）
     public init(
         configuration: IAPConfiguration,
         adapter: StoreKitAdapterProtocol? = nil,
-        receiptValidator: ReceiptValidatorProtocol? = nil
+        receiptValidator: ReceiptValidatorProtocol? = nil,
+        orderService: OrderServiceProtocol? = nil
     ) {
         self.configuration = configuration
         
@@ -202,6 +216,14 @@ public final class IAPManager: IAPManagerProtocol {
         
         // 使用提供的验证器或创建默认验证器
         self.receiptValidator = receiptValidator ?? LocalReceiptValidator(configuration: configuration.receiptValidation)
+        
+        // 使用提供的订单服务或创建默认订单服务
+        if let orderService = orderService {
+            self.orderService = orderService
+        } else {
+            let networkClient = NetworkClient(configuration: configuration.networkConfiguration)
+            self.orderService = OrderService(networkClient: networkClient)
+        }
         
         // 创建状态管理器
         self.state = IAPState()
@@ -215,16 +237,21 @@ public final class IAPManager: IAPManagerProtocol {
         self.purchaseService = PurchaseService(
             adapter: self.adapter,
             receiptValidator: self.receiptValidator,
+            orderService: self.orderService,
             configuration: configuration
         )
         
         self.transactionMonitor = TransactionMonitor(
             adapter: self.adapter,
+            orderService: self.orderService,
+            cache: self.productService.cacheInstance,
             configuration: configuration
         )
         
         self.recoveryManager = TransactionRecoveryManager(
             adapter: self.adapter,
+            orderService: self.orderService,
+            cache: self.productService.cacheInstance,
             configuration: configuration,
             stateManager: state
         )
@@ -338,7 +365,7 @@ public final class IAPManager: IAPManagerProtocol {
     }
     
     /// 购买指定商品
-    public func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult {
+    public func purchase(_ product: IAPProduct, userInfo: [String: Any]? = nil) async throws -> IAPPurchaseResult {
         IAPLogger.debug("IAPManager: Starting purchase for product \(product.id)")
         
         // 更新状态
@@ -350,20 +377,23 @@ public final class IAPManager: IAPManagerProtocol {
         }
         
         do {
-            let result = try await purchaseService.purchase(product)
+            let result = try await purchaseService.purchase(product, userInfo: userInfo)
             
             // 处理购买结果
             switch result {
-            case .success(let transaction):
+            case .success(let transaction, let order):
                 state.addTransaction(transaction)
-                IAPLogger.info("IAPManager: Purchase successful for product \(product.id)")
+                IAPLogger.info("IAPManager: Purchase successful for product \(product.id), order \(order.id)")
                 
-            case .pending(let transaction):
+            case .pending(let transaction, let order):
                 state.addTransaction(transaction)
-                IAPLogger.info("IAPManager: Purchase pending for product \(product.id)")
+                IAPLogger.info("IAPManager: Purchase pending for product \(product.id), order \(order.id)")
                 
-            case .cancelled, .userCancelled:
-                IAPLogger.info("IAPManager: Purchase cancelled for product \(product.id)")
+            case .cancelled(let order):
+                IAPLogger.info("IAPManager: Purchase cancelled for product \(product.id), order \(order?.id ?? "none")")
+                
+            case .failed(let error, let order):
+                IAPLogger.info("IAPManager: Purchase failed for product \(product.id): \(error), order \(order?.id ?? "none")")
             }
             
             return result
@@ -451,6 +481,38 @@ public final class IAPManager: IAPManagerProtocol {
         }
     }
     
+    /// 验证购买收据（包含订单信息）
+    public func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult {
+        IAPLogger.debug("IAPManager: Validating receipt (\(receiptData.count) bytes) with order \(order.id)")
+        
+        do {
+            let result = try await purchaseService.validateReceipt(receiptData, with: order)
+            
+            if result.isValid {
+                IAPLogger.info("IAPManager: Receipt and order validation successful")
+            } else {
+                IAPLogger.warning("IAPManager: Receipt and order validation failed")
+            }
+            
+            return result
+            
+        } catch {
+            let iapError = error as? IAPError ?? IAPError.from(error)
+            state.setError(iapError)
+            
+            IAPLogger.logError(
+                iapError,
+                context: [
+                    "operation": "validateReceiptWithOrder",
+                    "receiptSize": String(receiptData.count),
+                    "orderID": order.id
+                ]
+            )
+            
+            throw iapError
+        }
+    }
+    
     /// 开始监听交易状态变化
     public func startTransactionObserver() async {
         IAPLogger.debug("IAPManager: Starting transaction observer")
@@ -492,6 +554,63 @@ public final class IAPManager: IAPManagerProtocol {
         state.setTransactionObserverActive(false)
         
         IAPLogger.info("IAPManager: Transaction observer stopped")
+    }
+    
+    // MARK: - Order Management
+    
+    /// 为指定商品创建订单
+    public func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder {
+        IAPLogger.debug("IAPManager: Creating order for product \(product.id)")
+        
+        // 更新状态
+        state.setError(nil)
+        
+        do {
+            let order = try await orderService.createOrder(for: product, userInfo: userInfo)
+            
+            IAPLogger.info("IAPManager: Order created successfully: \(order.id), Server ID: \(order.serverOrderID ?? "none")")
+            return order
+            
+        } catch {
+            let iapError = error as? IAPError ?? IAPError.from(error)
+            state.setError(iapError)
+            
+            IAPLogger.logError(
+                iapError,
+                context: [
+                    "operation": "createOrder",
+                    "productID": product.id
+                ]
+            )
+            
+            throw iapError
+        }
+    }
+    
+    /// 查询订单状态
+    public func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus {
+        IAPLogger.debug("IAPManager: Querying order status for \(orderID)")
+        
+        do {
+            let status = try await orderService.queryOrderStatus(orderID)
+            
+            IAPLogger.info("IAPManager: Order status queried: \(orderID) -> \(status)")
+            return status
+            
+        } catch {
+            let iapError = error as? IAPError ?? IAPError.from(error)
+            state.setError(iapError)
+            
+            IAPLogger.logError(
+                iapError,
+                context: [
+                    "operation": "queryOrderStatus",
+                    "orderID": orderID
+                ]
+            )
+            
+            throw iapError
+        }
     }
     
     // MARK: - Additional Public Methods
@@ -621,15 +740,17 @@ public final class IAPManager: IAPManagerProtocol {
 extension IAPManager {
     
     /// 购买商品（通过商品ID）
-    /// - Parameter productID: 商品ID
+    /// - Parameters:
+    ///   - productID: 商品ID
+    ///   - userInfo: 可选的用户信息，将与订单关联
     /// - Returns: 购买结果
     /// - Throws: IAPError 相关错误
-    public func purchase(productID: String) async throws -> IAPPurchaseResult {
+    public func purchase(productID: String, userInfo: [String: Any]? = nil) async throws -> IAPPurchaseResult {
         guard let product = await getProduct(by: productID) else {
             throw IAPError.productNotFound
         }
         
-        return try await purchase(product)
+        return try await purchase(product, userInfo: userInfo)
     }
     
     /// 批量加载商品

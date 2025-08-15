@@ -167,26 +167,89 @@ public enum IAPTransactionState: Sendable, Equatable {
 /// 购买结果
 public enum IAPPurchaseResult: Sendable, Equatable {
     /// 购买成功
-    case success(IAPTransaction)
-    /// 购买取消
-    case cancelled
+    case success(IAPTransaction, IAPOrder)
     /// 购买延期
-    case pending(IAPTransaction)
-    /// 用户需要验证
-    case userCancelled
+    case pending(IAPTransaction, IAPOrder)
+    /// 购买取消
+    case cancelled(IAPOrder?)
+    /// 购买失败
+    case failed(IAPError, IAPOrder?)
     
     public static func == (lhs: IAPPurchaseResult, rhs: IAPPurchaseResult) -> Bool {
         switch (lhs, rhs) {
-        case (.success(let lhsTransaction), .success(let rhsTransaction)):
-            return lhsTransaction == rhsTransaction
-        case (.cancelled, .cancelled),
-             (.userCancelled, .userCancelled):
-            return true
-        case (.pending(let lhsTransaction), .pending(let rhsTransaction)):
-            return lhsTransaction == rhsTransaction
+        case (.success(let lhsTransaction, let lhsOrder), .success(let rhsTransaction, let rhsOrder)):
+            return lhsTransaction == rhsTransaction && lhsOrder == rhsOrder
+        case (.pending(let lhsTransaction, let lhsOrder), .pending(let rhsTransaction, let rhsOrder)):
+            return lhsTransaction == rhsTransaction && lhsOrder == rhsOrder
+        case (.cancelled(let lhsOrder), .cancelled(let rhsOrder)):
+            return lhsOrder == rhsOrder
+        case (.failed(let lhsError, let lhsOrder), .failed(let rhsError, let rhsOrder)):
+            return lhsError == rhsError && lhsOrder == rhsOrder
         default:
             return false
         }
+    }
+    
+    // MARK: - 便利属性
+    
+    /// 获取关联的交易（如果有）
+    public var transaction: IAPTransaction? {
+        switch self {
+        case .success(let transaction, _), .pending(let transaction, _):
+            return transaction
+        case .cancelled, .failed:
+            return nil
+        }
+    }
+    
+    /// 获取关联的订单（如果有）
+    public var order: IAPOrder? {
+        switch self {
+        case .success(_, let order), .pending(_, let order):
+            return order
+        case .cancelled(let order), .failed(_, let order):
+            return order
+        }
+    }
+    
+    /// 是否为成功结果
+    public var isSuccess: Bool {
+        if case .success = self {
+            return true
+        }
+        return false
+    }
+    
+    /// 是否为失败结果
+    public var isFailure: Bool {
+        if case .failed = self {
+            return true
+        }
+        return false
+    }
+    
+    /// 是否为取消结果
+    public var isCancelled: Bool {
+        if case .cancelled = self {
+            return true
+        }
+        return false
+    }
+    
+    /// 是否为待处理结果
+    public var isPending: Bool {
+        if case .pending = self {
+            return true
+        }
+        return false
+    }
+    
+    /// 获取错误信息（如果是失败结果）
+    public var error: IAPError? {
+        if case .failed(let error, _) = self {
+            return error
+        }
+        return nil
     }
 }
 

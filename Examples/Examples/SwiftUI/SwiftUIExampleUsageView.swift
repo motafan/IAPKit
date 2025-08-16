@@ -371,22 +371,30 @@ struct SwiftUIExampleUsageView: View {
     /// 处理购买结果
     private func handlePurchaseResult(_ result: IAPPurchaseResult) {
         switch result {
-        case .success(let transaction):
-            print("购买成功: \(transaction.productID)")
+        case .success(let transaction, let order):
+            print("购买成功: \(transaction.productID), 订单: \(order.id)")
             
             // 完成交易
             Task {
                 try? await iapManager.finishTransaction(transaction)
             }
             
-        case .pending(let transaction):
-            print("购买待处理: \(transaction.productID)")
+        case .pending(let transaction, let order):
+            print("购买待处理: \(transaction.productID), 订单: \(order.id)")
             
-        case .cancelled:
-            print("购买被取消")
+        case .cancelled(let order):
+            if let order = order {
+                print("购买被取消，订单: \(order.id)")
+            } else {
+                print("购买被取消")
+            }
             
-        case .userCancelled:
-            print("用户取消购买")
+        case .failed(let error, let order):
+            if let order = order {
+                print("购买失败: \(error.localizedDescription), 订单: \(order.id)")
+            } else {
+                print("购买失败: \(error.localizedDescription)")
+            }
         }
     }
 }

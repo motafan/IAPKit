@@ -120,7 +120,11 @@ func testErrorHandlingSystemErrorConversion() async throws {
         case NSURLErrorTimedOut:
             #expect(iapError == .timeout)
         default:
-            #expect(case .unknownError = iapError)
+            if case .unknownError = iapError {
+                // Expected case
+            } else {
+                #expect(Bool(false), "Expected unknownError case")
+            }
         }
     }
 }
@@ -211,7 +215,8 @@ func testErrorHandlingPurchaseServiceErrorHandling() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator()
-    let purchaseService = PurchaseService(adapter: mockAdapter, receiptValidator: mockValidator)
+    let mockOrderService = MockOrderService()
+    let purchaseService = PurchaseService(adapter: mockAdapter, receiptValidator: mockValidator, orderService: mockOrderService)
     
     let testProduct = TestDataGenerator.generateProduct()
     
@@ -275,7 +280,8 @@ func testErrorHandlingErrorChainPropagation() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator()
-    let purchaseService = PurchaseService(adapter: mockAdapter, receiptValidator: mockValidator)
+    let mockOrderService = MockOrderService()
+    let purchaseService = PurchaseService(adapter: mockAdapter, receiptValidator: mockValidator, orderService: mockOrderService)
     
     let testProduct = TestDataGenerator.generateProduct()
     let originalError = IAPError.networkError

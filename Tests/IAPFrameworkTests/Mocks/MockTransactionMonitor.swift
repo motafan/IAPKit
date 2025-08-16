@@ -51,6 +51,19 @@ public final class MockTransactionMonitor: @unchecked Sendable {
     
     // MARK: - TransactionMonitor Mock Methods
     
+    public func addMockTransaction(_ transaction: IAPTransaction) async {
+        simulateTransactionUpdate(transaction)
+    }
+    
+    public func getAllTransactions() async -> [IAPTransaction] {
+        return simulatedTransactionUpdates
+    }
+    
+    public func configureExpirationMonitoring(orders: [IAPOrder]) async {
+        incrementCallCount(for: "configureExpirationMonitoring")
+        callParameters["configureExpirationMonitoring_orders"] = orders
+    }
+    
     public func startMonitoring() async {
         incrementCallCount(for: "startMonitoring")
         

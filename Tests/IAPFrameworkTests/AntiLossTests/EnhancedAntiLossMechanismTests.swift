@@ -196,7 +196,13 @@ func testRetryManagerExecuteWithRetrySuccess() async throws {
 @Test("AntiLoss - 重试管理器带重试的操作最终失败")
 func testRetryManagerExecuteWithRetryFailure() async throws {
     // Given
-    let config = RetryConfiguration(maxRetries: 2)
+    let config = RetryConfiguration(
+        maxRetries: 2,
+        baseDelay: 0.1,
+        maxDelay: 1.0,
+        backoffMultiplier: 2.0,
+        strategy: .exponential
+    )
     let retryManager = RetryManager(configuration: config)
     var attemptCount = 0
     

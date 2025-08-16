@@ -130,9 +130,9 @@ func testRetryManagerExecuteWithRetry() async throws {
     let record = await retryManager.getRecord(for: "test_op")
     #expect(record == nil)
 }
-@Test("交易监控器 - 基本监控功能")
+@Test("交易监控器 - 基本监控功能 (AntiLoss)")
 @MainActor
-func testTransactionMonitorBasicMonitoring() async throws {
+func testAntiLossTransactionMonitorBasicMonitoring() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let monitor = TransactionMonitor(adapter: mockAdapter)
@@ -157,9 +157,9 @@ func testTransactionMonitorBasicMonitoring() async throws {
     #expect(monitor.isCurrentlyMonitoring == false)
 }
 
-@Test("交易监控器 - 处理器管理")
+@Test("交易监控器 - 处理器管理 (AntiLoss)")
 @MainActor
-func testTransactionMonitorHandlerManagement() async throws {
+func testAntiLossTransactionMonitorHandlerManagement() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let monitor = TransactionMonitor(adapter: mockAdapter)

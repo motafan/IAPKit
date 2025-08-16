@@ -362,6 +362,7 @@ extension UIKitExampleSettingsViewController: UITableViewDelegate {
 
 // MARK: - UIKitIAPManager.Delegate
 
+@MainActor
 extension UIKitExampleSettingsViewController: UIKitIAPManager.Delegate {
     
     func iapManager(_ manager: UIKitIAPManager, didLoadProducts products: [IAPProduct]) {

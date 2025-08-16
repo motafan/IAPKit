@@ -180,6 +180,193 @@ public struct TestDataGenerator {
         ]
     }   
  
+    // MARK: - Order Generation
+    
+    /// 生成测试订单
+    /// - Parameters:
+    ///   - id: 订单ID
+    ///   - productID: 商品ID
+    ///   - status: 订单状态
+    ///   - userInfo: 用户信息
+    ///   - createdAt: 创建时间
+    ///   - expiresAt: 过期时间
+    /// - Returns: 测试订单
+    public static func generateOrder(
+        id: String = "test.order",
+        productID: String = "test.product",
+        status: IAPOrderStatus = .created,
+        userInfo: [String: String]? = nil,
+        createdAt: Date = Date(),
+        expiresAt: Date? = nil
+    ) -> IAPOrder {
+        return IAPOrder(
+            id: id,
+            productID: productID,
+            userInfo: userInfo,
+            createdAt: createdAt,
+            expiresAt: expiresAt,
+            status: status
+        )
+    }
+    
+    /// 生成成功的订单
+    /// - Parameters:
+    ///   - id: 订单ID
+    ///   - productID: 商品ID
+    ///   - serverOrderID: 服务器订单ID
+    /// - Returns: 成功订单
+    public static func generateSuccessfulOrder(
+        id: String = "success.order",
+        productID: String = "test.product",
+        serverOrderID: String? = nil
+    ) -> IAPOrder {
+        return IAPOrder.completed(
+            id: id,
+            productID: productID,
+            serverOrderID: serverOrderID ?? "server_\(id)"
+        )
+    }
+    
+    /// 生成失败的订单
+    /// - Parameters:
+    ///   - id: 订单ID
+    ///   - productID: 商品ID
+    ///   - serverOrderID: 服务器订单ID
+    /// - Returns: 失败订单
+    public static func generateFailedOrder(
+        id: String = "failed.order",
+        productID: String = "test.product",
+        serverOrderID: String? = nil
+    ) -> IAPOrder {
+        return IAPOrder.failed(
+            id: id,
+            productID: productID,
+            serverOrderID: serverOrderID
+        )
+    }
+    
+    /// 生成过期的订单
+    /// - Parameters:
+    ///   - id: 订单ID
+    ///   - productID: 商品ID
+    ///   - minutesAgo: 多少分钟前过期
+    /// - Returns: 过期订单
+    public static func generateExpiredOrder(
+        id: String = "expired.order",
+        productID: String = "test.product",
+        minutesAgo: Int = 30
+    ) -> IAPOrder {
+        let expiredTime = Date().addingTimeInterval(-TimeInterval(minutesAgo * 60))
+        return IAPOrder(
+            id: id,
+            productID: productID,
+            createdAt: expiredTime.addingTimeInterval(-300), // 创建时间比过期时间早5分钟
+            expiresAt: expiredTime,
+            status: .created
+        )
+    }
+    
+    /// 生成待处理的订单
+    /// - Parameters:
+    ///   - id: 订单ID
+    ///   - productID: 商品ID
+    ///   - expiresInMinutes: 多少分钟后过期
+    /// - Returns: 待处理订单
+    public static func generatePendingOrder(
+        id: String = "pending.order",
+        productID: String = "test.product",
+        expiresInMinutes: Int = 30
+    ) -> IAPOrder {
+        let expirationTime = Date().addingTimeInterval(TimeInterval(expiresInMinutes * 60))
+        return IAPOrder(
+            id: id,
+            productID: productID,
+            expiresAt: expirationTime,
+            status: .pending
+        )
+    }
+    
+    /// 生成多个测试订单
+    /// - Parameters:
+    ///   - count: 订单数量
+    ///   - productID: 商品ID前缀
+    ///   - status: 订单状态
+    /// - Returns: 订单列表
+    public static func generateOrders(
+        count: Int,
+        productID: String = "test.product",
+        status: IAPOrderStatus = .created
+    ) -> [IAPOrder] {
+        return (0..<count).map { index in
+            generateOrder(
+                id: "test.order.\(index)",
+                productID: "\(productID).\(index)",
+                status: status,
+                createdAt: Date().addingTimeInterval(-TimeInterval(index * 60))
+            )
+        }
+    }
+    
+    /// 生成混合状态的订单
+    /// - Returns: 包含各种状态订单的数组
+    public static func generateMixedOrders() -> [IAPOrder] {
+        return [
+            generateOrder(id: "order1", productID: "product1", status: .created),
+            generateOrder(id: "order2", productID: "product2", status: .pending),
+            generateSuccessfulOrder(id: "order3", productID: "product3"),
+            generateFailedOrder(id: "order4", productID: "product4"),
+            generateOrder(id: "order5", productID: "product5", status: .cancelled),
+            generateExpiredOrder(id: "order6", productID: "product6"),
+            generatePendingOrder(id: "order7", productID: "product7")
+        ]
+    }
+    
+    /// 生成带有用户信息的订单
+    /// - Parameters:
+    ///   - id: 订单ID
+    ///   - productID: 商品ID
+    ///   - userID: 用户ID
+    ///   - customData: 自定义数据
+    /// - Returns: 带用户信息的订单
+    public static func generateOrderWithUserInfo(
+        id: String = "user.order",
+        productID: String = "test.product",
+        userID: String = "test.user",
+        customData: [String: String] = [:]
+    ) -> IAPOrder {
+        var userInfo = customData
+        userInfo["userID"] = userID
+        userInfo["timestamp"] = "\(Date().timeIntervalSince1970)"
+        
+        return IAPOrder(
+            id: id,
+            productID: productID,
+            userInfo: userInfo,
+            status: .created,
+            userID: userID
+        )
+    }
+    
+    /// 生成订单和交易的关联对
+    /// - Parameters:
+    ///   - orderID: 订单ID
+    ///   - productID: 商品ID
+    ///   - transactionState: 交易状态
+    /// - Returns: 订单和交易的元组
+    public static func generateOrderTransactionPair(
+        orderID: String = "test.order",
+        productID: String = "test.product",
+        transactionState: IAPTransactionState = .purchased
+    ) -> (order: IAPOrder, transaction: IAPTransaction) {
+        let order = generateOrder(id: orderID, productID: productID, status: .pending)
+        let transaction = generateTransaction(
+            id: "tx_\(orderID)",
+            productID: productID,
+            state: transactionState
+        )
+        return (order: order, transaction: transaction)
+    }
+    
     // MARK: - Receipt Generation
     
     /// 生成测试收据数据
@@ -310,21 +497,28 @@ public struct TestDataGenerator {
     
     // MARK: - Purchase Result Generation
     
-    /// 生成购买结果
+    /// 生成购买结果（支持订单）
     /// - Parameter type: 结果类型
     /// - Returns: 购买结果
     public static func generatePurchaseResult(type: PurchaseResultType = .success) -> IAPPurchaseResult {
         switch type {
         case .success:
             let transaction = generateSuccessfulTransaction()
-            return .success(transaction)
+            let order = generateSuccessfulOrder(productID: transaction.productID)
+            return .success(transaction, order)
         case .cancelled:
-            return .cancelled
+            let order = generateOrder(status: .cancelled)
+            return .cancelled(order)
         case .userCancelled:
-            return .userCancelled
+            let order = generateOrder(status: .cancelled)
+            return .cancelled(order)
         case .pending:
             let transaction = generateTransaction(state: .purchasing)
-            return .pending(transaction)
+            let order = generatePendingOrder(productID: transaction.productID)
+            return .pending(transaction, order)
+        case .failed:
+            let order = generateFailedOrder()
+            return .failed(.purchaseFailed(underlying: "Test failure"), order)
         }
     }
     
@@ -334,6 +528,7 @@ public struct TestDataGenerator {
         case cancelled
         case userCancelled
         case pending
+        case failed
     }
     
     // MARK: - Monitoring Stats Generation
@@ -415,6 +610,12 @@ public struct TestDataGenerator {
         return "tx_\(generateRandomString(length: 12))"
     }
     
+    /// 生成随机订单ID
+    /// - Returns: 随机订单ID
+    public static func generateRandomOrderID() -> String {
+        return "order_\(generateRandomString(length: 12))"
+    }
+    
     /// 生成测试日期
     /// - Parameter daysAgo: 几天前
     /// - Returns: 测试日期
@@ -441,6 +642,7 @@ extension TestDataGenerator {
         return TestScenarios(
             products: generateMixedProducts(),
             transactions: generateMixedTransactions(),
+            orders: generateMixedOrders(),
             errors: ErrorType.allCases.map { generateError(type: $0) },
             purchaseResults: PurchaseResultType.allCases.map { generatePurchaseResult(type: $0) },
             configurations: [
@@ -450,12 +652,28 @@ extension TestDataGenerator {
             ]
         )
     }
+    
+    /// 生成订单测试场景
+    /// - Returns: 订单测试场景数据
+    public static func generateOrderTestScenarios() -> OrderTestScenarios {
+        return OrderTestScenarios(
+            activeOrders: generateOrders(count: 3, status: .pending),
+            expiredOrders: [generateExpiredOrder()],
+            completedOrders: [generateSuccessfulOrder()],
+            failedOrders: [generateFailedOrder()],
+            orderTransactionPairs: [
+                generateOrderTransactionPair(orderID: "order1", productID: "product1"),
+                generateOrderTransactionPair(orderID: "order2", productID: "product2", transactionState: .failed(.networkError))
+            ]
+        )
+    }
 }
 
 /// 测试场景数据集合
 public struct TestScenarios {
     public let products: [IAPProduct]
     public let transactions: [IAPTransaction]
+    public let orders: [IAPOrder]
     public let errors: [IAPError]
     public let purchaseResults: [IAPPurchaseResult]
     public let configurations: [IAPConfiguration]
@@ -463,14 +681,49 @@ public struct TestScenarios {
     public init(
         products: [IAPProduct],
         transactions: [IAPTransaction],
+        orders: [IAPOrder],
         errors: [IAPError],
         purchaseResults: [IAPPurchaseResult],
         configurations: [IAPConfiguration]
     ) {
         self.products = products
         self.transactions = transactions
+        self.orders = orders
         self.errors = errors
         self.purchaseResults = purchaseResults
         self.configurations = configurations
+    }
+}
+
+/// 订单测试场景数据集合
+public struct OrderTestScenarios {
+    public let activeOrders: [IAPOrder]
+    public let expiredOrders: [IAPOrder]
+    public let completedOrders: [IAPOrder]
+    public let failedOrders: [IAPOrder]
+    public let orderTransactionPairs: [(order: IAPOrder, transaction: IAPTransaction)]
+    
+    public init(
+        activeOrders: [IAPOrder],
+        expiredOrders: [IAPOrder],
+        completedOrders: [IAPOrder],
+        failedOrders: [IAPOrder],
+        orderTransactionPairs: [(order: IAPOrder, transaction: IAPTransaction)]
+    ) {
+        self.activeOrders = activeOrders
+        self.expiredOrders = expiredOrders
+        self.completedOrders = completedOrders
+        self.failedOrders = failedOrders
+        self.orderTransactionPairs = orderTransactionPairs
+    }
+    
+    /// 获取所有订单
+    public var allOrders: [IAPOrder] {
+        return activeOrders + expiredOrders + completedOrders + failedOrders
+    }
+    
+    /// 获取所有交易
+    public var allTransactions: [IAPTransaction] {
+        return orderTransactionPairs.map { $0.transaction }
     }
 }

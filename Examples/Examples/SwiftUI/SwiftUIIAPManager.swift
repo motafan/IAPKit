@@ -35,6 +35,15 @@ public final class SwiftUIIAPManager: ObservableObject {
     /// 最近的交易列表
     @Published public private(set) var recentTransactions: [IAPTransaction] = []
     
+    /// 活跃的订单列表
+    @Published public private(set) var activeOrders: [IAPOrder] = []
+    
+    /// 最近的订单列表
+    @Published public private(set) var recentOrders: [IAPOrder] = []
+    
+    /// 正在创建订单的商品ID集合
+    @Published public private(set) var creatingOrders: Set<String> = []
+    
     /// 最后的错误信息
     @Published public private(set) var lastError: IAPError?
     
@@ -60,9 +69,9 @@ public final class SwiftUIIAPManager: ObservableObject {
     }
     
     deinit {
-        Task { @MainActor in
-            cleanup()
-        }
+        // In Swift 6, we cannot use Task in deinit as it may outlive the object
+        // The cleanup will be handled by the app lifecycle or manual calls
+        stopStatusMonitoring()
     }
     
     // MARK: - Public Methods
@@ -102,18 +111,27 @@ public final class SwiftUIIAPManager: ObservableObject {
         }
     }
     
-    /// 购买商品
-    public func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult {
+    /// 购买商品（使用订单）
+    public func purchase(_ product: IAPProduct, userInfo: [String: Any]? = nil) async throws -> IAPPurchaseResult {
         purchasingProducts.insert(product.id)
         clearError()
         
         do {
-            let result = try await coreManager.purchase(product)
+            let result = try await coreManager.purchase(product, userInfo: userInfo)
             purchasingProducts.remove(product.id)
             
-            // 更新最近交易
-            if case .success(let transaction) = result {
+            // 更新最近交易和订单
+            switch result {
+            case .success(let transaction, let order):
                 addRecentTransaction(transaction)
+                addRecentOrder(order)
+            case .pending(let transaction, let order):
+                addRecentTransaction(transaction)
+                addRecentOrder(order)
+            case .cancelled(let order), .failed(_, let order):
+                if let order = order {
+                    addRecentOrder(order)
+                }
             }
             
             return result
@@ -122,6 +140,11 @@ public final class SwiftUIIAPManager: ObservableObject {
             await handleError(error)
             throw error
         }
+    }
+    
+    /// 购买商品（向后兼容，不使用订单）
+    public func purchaseWithoutOrder(_ product: IAPProduct) async throws -> IAPPurchaseResult {
+        return try await purchase(product, userInfo: nil)
     }
     
     /// 恢复购买
@@ -160,6 +183,50 @@ public final class SwiftUIIAPManager: ObservableObject {
         
         do {
             return try await coreManager.validateReceipt(receiptData)
+        } catch {
+            await handleError(error)
+            throw error
+        }
+    }
+    
+    /// 验证收据（包含订单信息）
+    public func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult {
+        clearError()
+        
+        do {
+            return try await coreManager.validateReceipt(receiptData, with: order)
+        } catch {
+            await handleError(error)
+            throw error
+        }
+    }
+    
+    /// 创建订单
+    public func createOrder(for product: IAPProduct, userInfo: [String: Any]? = nil) async throws -> IAPOrder {
+        creatingOrders.insert(product.id)
+        clearError()
+        
+        do {
+            let order = try await coreManager.createOrder(for: product, userInfo: userInfo)
+            creatingOrders.remove(product.id)
+            addActiveOrder(order)
+            addRecentOrder(order)
+            return order
+        } catch {
+            creatingOrders.remove(product.id)
+            await handleError(error)
+            throw error
+        }
+    }
+    
+    /// 查询订单状态
+    public func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus {
+        clearError()
+        
+        do {
+            let status = try await coreManager.queryOrderStatus(orderID)
+            updateOrderStatus(orderID, status: status)
+            return status
         } catch {
             await handleError(error)
             throw error
@@ -218,9 +285,24 @@ public final class SwiftUIIAPManager: ObservableObject {
         return recentTransactions.first { $0.productID == productID }
     }
     
+    /// 获取指定商品的活跃订单
+    public func getActiveOrder(for productID: String) -> IAPOrder? {
+        return activeOrders.first { $0.productID == productID }
+    }
+    
+    /// 获取指定商品的最近订单
+    public func getRecentOrder(for productID: String) -> IAPOrder? {
+        return recentOrders.first { $0.productID == productID }
+    }
+    
+    /// 检查是否正在创建订单
+    public func isCreatingOrder(_ productID: String) -> Bool {
+        return creatingOrders.contains(productID)
+    }
+    
     /// 检查框架是否忙碌
     public var isBusy: Bool {
-        return isLoadingProducts || isRestoringPurchases || !purchasingProducts.isEmpty || isRecoveryInProgress
+        return isLoadingProducts || isRestoringPurchases || !purchasingProducts.isEmpty || !creatingOrders.isEmpty || isRecoveryInProgress
     }
     
     /// 获取本地化的错误消息
@@ -260,9 +342,12 @@ public final class SwiftUIIAPManager: ObservableObject {
     }
     
     /// 停止状态监控
-    private func stopStatusMonitoring() {
-        statusUpdateTimer?.invalidate()
-        statusUpdateTimer = nil
+    private nonisolated func stopStatusMonitoring() {
+        // Use MainActor.assumeIsolated since we know this is safe for timer cleanup
+        MainActor.assumeIsolated {
+            statusUpdateTimer?.invalidate()
+            statusUpdateTimer = nil
+        }
     }
     
     /// 更新状态
@@ -292,6 +377,61 @@ public final class SwiftUIIAPManager: ObservableObject {
         // 限制最近交易数量
         if recentTransactions.count > 10 {
             recentTransactions = Array(recentTransactions.prefix(10))
+        }
+    }
+    
+    /// 添加活跃订单
+    private func addActiveOrder(_ order: IAPOrder) {
+        // 移除同一商品的旧活跃订单
+        activeOrders.removeAll { $0.productID == order.productID }
+        
+        // 只有非终态订单才添加到活跃列表
+        if !order.isTerminal {
+            activeOrders.insert(order, at: 0)
+        }
+        
+        // 限制活跃订单数量
+        if activeOrders.count > 20 {
+            activeOrders = Array(activeOrders.prefix(20))
+        }
+    }
+    
+    /// 添加最近订单
+    private func addRecentOrder(_ order: IAPOrder) {
+        // 移除同一订单ID的旧记录
+        recentOrders.removeAll { $0.id == order.id }
+        
+        // 添加新订单到开头
+        recentOrders.insert(order, at: 0)
+        
+        // 限制最近订单数量
+        if recentOrders.count > 20 {
+            recentOrders = Array(recentOrders.prefix(20))
+        }
+        
+        // 如果订单变为终态，从活跃列表中移除
+        if order.isTerminal {
+            activeOrders.removeAll { $0.id == order.id }
+        }
+    }
+    
+    /// 更新订单状态
+    private func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) {
+        // 更新活跃订单列表
+        if let index = activeOrders.firstIndex(where: { $0.id == orderID }) {
+            let updatedOrder = activeOrders[index].withStatus(status)
+            activeOrders[index] = updatedOrder
+            
+            // 如果订单变为终态，移动到最近订单列表
+            if status.isTerminal {
+                activeOrders.remove(at: index)
+                addRecentOrder(updatedOrder)
+            }
+        }
+        
+        // 更新最近订单列表
+        if let index = recentOrders.firstIndex(where: { $0.id == orderID }) {
+            recentOrders[index] = recentOrders[index].withStatus(status)
         }
     }
     

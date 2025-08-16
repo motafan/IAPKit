@@ -71,14 +71,27 @@ public func cleanup()
 /// Load products by IDs
 public func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct]
 
-/// Purchase a product
-public func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
+/// Purchase a product with optional user information
+public func purchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult
 
 /// Restore previous purchases
 public func restorePurchases() async throws -> [IAPTransaction]
 
 /// Validate a receipt
 public func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult
+
+/// Validate a receipt with order information
+public func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult
+```
+
+#### Order Management
+
+```swift
+/// Create an order for a product
+public func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder
+
+/// Query the status of an order
+public func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus
 ```
 
 #### Transaction Monitoring
@@ -162,11 +175,16 @@ Core protocol defining the main IAP interface.
 @MainActor
 public protocol IAPManagerProtocol: Sendable {
     func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct]
-    func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult
+    func purchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult
     func restorePurchases() async throws -> [IAPTransaction]
     func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult
+    func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult
     func startTransactionObserver() async
     func stopTransactionObserver()
+    
+    // Order Management
+    func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder
+    func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus
 }
 ```
 
@@ -273,11 +291,114 @@ Result of a purchase operation.
 
 ```swift
 public enum IAPPurchaseResult: Sendable {
-    case success(IAPTransaction)
-    case pending(IAPTransaction)
-    case cancelled
-    case userCancelled
+    case success(IAPTransaction, IAPOrder)
+    case pending(IAPTransaction, IAPOrder)
+    case cancelled(IAPOrder?)
+    case failed(IAPError, IAPOrder?)
 }
+```
+
+### IAPOrder
+
+Represents a server-side order for a purchase.
+
+```swift
+public struct IAPOrder: Sendable, Identifiable, Equatable, Codable {
+    public let id: String
+    public let productID: String
+    public let userInfo: [String: String]?
+    public let createdAt: Date
+    public let expiresAt: Date?
+    public let status: IAPOrderStatus
+    public let serverOrderID: String?
+    public let amount: Decimal?
+    public let currency: String?
+    public let userID: String?
+}
+```
+
+#### Properties
+
+```swift
+/// Whether the order has expired
+public var isExpired: Bool { get }
+
+/// Whether the order is active
+public var isActive: Bool { get }
+
+/// Whether the order is in a terminal state
+public var isTerminal: Bool { get }
+
+/// Whether the order can be cancelled
+public var isCancellable: Bool { get }
+```
+
+#### Methods
+
+```swift
+/// Create a new order with updated status
+public func withStatus(_ newStatus: IAPOrderStatus) -> IAPOrder
+
+/// Create a new order with server order ID
+public func withServerOrderID(_ serverID: String) -> IAPOrder
+
+/// Create a new order with amount and currency
+public func withAmount(_ amount: Decimal, currency: String) -> IAPOrder
+
+/// Create a created order
+public static func created(
+    id: String,
+    productID: String,
+    userInfo: [String: String]?,
+    serverOrderID: String?
+) -> IAPOrder
+
+/// Create a completed order
+public static func completed(
+    id: String,
+    productID: String,
+    serverOrderID: String?
+) -> IAPOrder
+
+/// Create a failed order
+public static func failed(
+    id: String,
+    productID: String,
+    serverOrderID: String?
+) -> IAPOrder
+```
+
+### IAPOrderStatus
+
+Status of an order.
+
+```swift
+public enum IAPOrderStatus: String, Sendable, CaseIterable, Equatable, Codable {
+    case created = "created"
+    case pending = "pending"
+    case completed = "completed"
+    case cancelled = "cancelled"
+    case failed = "failed"
+}
+```
+
+#### Properties
+
+```swift
+/// Whether this is a terminal state
+public var isTerminal: Bool { get }
+
+/// Whether this is a successful state
+public var isSuccessful: Bool { get }
+
+/// Whether this is a failed state
+public var isFailed: Bool { get }
+
+/// Whether this is an in-progress state
+public var isInProgress: Bool { get }
+
+/// Localized description
+public var localizedDescription: String { get }
 ```
 
 ### IAPProductType
@@ -379,6 +500,14 @@ public enum IAPError: LocalizedError, Sendable {
     case timeout
     case operationCancelled
     case unknownError(underlying: Error)
+    
+    // Order-related errors
+    case orderCreationFailed(underlying: String)
+    case orderNotFound
+    case orderExpired
+    case orderAlreadyCompleted
+    case orderValidationFailed
+    case serverOrderMismatch
 }
 ```
 
@@ -569,6 +698,243 @@ public let MinimumIOSVersion = "13.0"
 
 /// Supported macOS version
 public let MinimumMacOSVersion = "10.15"
+```
+
+## Order-Based Purchase Flow
+
+The framework supports server-side order management for enhanced purchase tracking and validation.
+
+### Basic Order-Based Purchase
+
+```swift
+// Create an order with user information
+let userInfo = [
+    "userID": "12345",
+    "campaign": "summer_sale",
+    "platform": "iOS"
+]
+
+do {
+    // Purchase with order creation
+    let result = try await iapManager.purchase(product, userInfo: userInfo)
+    
+    switch result {
+    case .success(let transaction, let order):
+        print("Purchase successful!")
+        print("Transaction ID: \(transaction.id)")
+        print("Order ID: \(order.id)")
+        print("Server Order ID: \(order.serverOrderID ?? "none")")
+        
+    case .pending(let transaction, let order):
+        print("Purchase pending approval")
+        print("Order ID: \(order.id)")
+        
+    case .cancelled(let order):
+        print("Purchase cancelled")
+        if let order = order {
+            print("Order ID: \(order.id)")
+        }
+        
+    case .failed(let error, let order):
+        print("Purchase failed: \(error.localizedDescription)")
+        if let order = order {
+            print("Order ID: \(order.id)")
+        }
+    }
+} catch {
+    print("Purchase error: \(error)")
+}
+```
+
+### Manual Order Creation
+
+```swift
+// Create order before purchase
+do {
+    let order = try await iapManager.createOrder(for: product, userInfo: userInfo)
+    print("Order created: \(order.id)")
+    
+    // Query order status
+    let status = try await iapManager.queryOrderStatus(order.id)
+    print("Order status: \(status.localizedDescription)")
+    
+    // Proceed with purchase using the order
+    let result = try await iapManager.purchase(product, userInfo: userInfo)
+    // Handle result...
+    
+} catch {
+    print("Order creation failed: \(error)")
+}
+```
+
+### Receipt Validation with Orders
+
+```swift
+// Validate receipt with order information
+guard let receiptURL = Bundle.main.appStoreReceiptURL,
+      let receiptData = try? Data(contentsOf: receiptURL) else {
+    throw IAPError.invalidReceiptData
+}
+
+do {
+    let result = try await iapManager.validateReceipt(receiptData, with: order)
+    
+    if result.isValid {
+        print("Receipt and order validation successful")
+        print("Order status: \(order.status)")
+    } else {
+        print("Validation failed: \(result.error?.localizedDescription ?? "Unknown error")")
+    }
+} catch {
+    print("Validation error: \(error)")
+}
+```
+
+### Order Status Monitoring
+
+```swift
+// Monitor order status changes
+func monitorOrder(_ order: IAPOrder) async {
+    var currentOrder = order
+    
+    while !currentOrder.status.isTerminal {
+        do {
+            let newStatus = try await iapManager.queryOrderStatus(currentOrder.id)
+            
+            if newStatus != currentOrder.status {
+                print("Order status changed: \(currentOrder.status) -> \(newStatus)")
+                currentOrder = currentOrder.withStatus(newStatus)
+                
+                // Handle status change
+                switch newStatus {
+                case .completed:
+                    print("Order completed successfully!")
+                case .failed:
+                    print("Order failed")
+                case .cancelled:
+                    print("Order was cancelled")
+                default:
+                    break
+                }
+            }
+            
+            // Wait before next check
+            try await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            
+        } catch {
+            print("Failed to query order status: \(error)")
+            break
+        }
+    }
+}
+```
+
+### UserInfo Parameter Usage
+
+The `userInfo` parameter allows you to associate custom data with orders:
+
+```swift
+let userInfo: [String: Any] = [
+    // User identification
+    "userID": "user_12345",
+    "email": "user@example.com",
+    
+    // Marketing attribution
+    "campaign": "summer_sale_2024",
+    "source": "push_notification",
+    "medium": "mobile_app",
+    
+    // Purchase context
+    "screen": "premium_features",
+    "feature": "unlimited_storage",
+    "plan": "annual",
+    
+    // A/B testing
+    "experiment": "pricing_test_v2",
+    "variant": "discount_20_percent",
+    
+    // Platform information
+    "platform": "iOS",
+    "app_version": "2.1.0",
+    "device_model": UIDevice.current.model,
+    
+    // Custom business data
+    "subscription_tier": "premium",
+    "referral_code": "FRIEND2024",
+    "promo_code": "SAVE20"
+]
+
+// Use in purchase
+let result = try await iapManager.purchase(product, userInfo: userInfo)
+```
+
+### Error Handling for Orders
+
+```swift
+do {
+    let result = try await iapManager.purchase(product, userInfo: userInfo)
+    // Handle success...
+} catch IAPError.orderCreationFailed(let message) {
+    print("Order creation failed: \(message)")
+    // Retry or fallback to direct purchase
+} catch IAPError.orderExpired {
+    print("Order expired, creating new order...")
+    // Create new order and retry
+} catch IAPError.orderValidationFailed {
+    print("Order validation failed")
+    // Handle validation failure
+} catch IAPError.serverOrderMismatch {
+    print("Server order mismatch")
+    // Handle server synchronization issue
+} catch {
+    print("General error: \(error)")
+}
+```
+
+### Order Lifecycle
+
+1. **Created**: Order is created on server
+2. **Pending**: Payment is being processed
+3. **Completed**: Payment successful and order fulfilled
+4. **Cancelled**: Order was cancelled by user or system
+5. **Failed**: Order processing failed
+
+```swift
+// Check order lifecycle state
+switch order.status {
+case .created:
+    // Order ready for payment
+    print("Order ready for payment")
+    
+case .pending:
+    // Payment in progress
+    print("Processing payment...")
+    
+case .completed:
+    // Order fulfilled
+    print("Order completed successfully")
+    
+case .cancelled:
+    // Order cancelled
+    print("Order was cancelled")
+    
+case .failed:
+    // Order failed
+    print("Order processing failed")
+}
+
+// Check order properties
+if order.isActive {
+    print("Order is active and can be processed")
+}
+
+if order.isExpired {
+    print("Order has expired")
+}
+
+if order.isCancellable {
+    print("Order can be cancelled")
+}
 ```
 
 ---

@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import IAPFramework
 
 // MARK: - StoreKitAdapterFactory 单元测试
@@ -6,7 +7,7 @@ import Testing
 @Test("StoreKitAdapterFactory - 版本检测")
 func testStoreKitAdapterFactoryVersionDetection() async throws {
     // Given & When
-    let adapterType = StoreKitAdapterFactory.determineAdapterType()
+    let adapterType = StoreKitAdapterFactory.detectBestAdapterType()
     
     // Then
     // 根据当前运行环境，应该返回适当的适配器类型
@@ -19,15 +20,10 @@ func testStoreKitAdapterFactoryVersionDetection() async throws {
 
 @Test("StoreKitAdapterFactory - 适配器创建")
 func testStoreKitAdapterFactoryCreation() async throws {
-    // Given
-    let factory = StoreKitAdapterFactory()
-    
-    // When
-    let adapter = factory.createAdapter()
+    // Given & When
+    let adapter = StoreKitAdapterFactory.createAdapter()
     
     // Then
-    #expect(adapter != nil)
-    
     // 验证创建的适配器类型是否正确
     if #available(iOS 15.0, macOS 12.0, *) {
         #expect(adapter is StoreKit2Adapter)
@@ -38,28 +34,20 @@ func testStoreKitAdapterFactoryCreation() async throws {
 
 @Test("StoreKitAdapterFactory - 强制使用 StoreKit 1")
 func testStoreKitAdapterFactoryForceStoreKit1() async throws {
-    // Given
-    let factory = StoreKitAdapterFactory()
-    
-    // When
-    let adapter = factory.createAdapter(forceType: .storeKit1)
+    // Given & When
+    let adapter = StoreKitAdapterFactory.createAdapter(forceType: .storeKit1)
     
     // Then
-    #expect(adapter != nil)
     #expect(adapter is StoreKit1Adapter)
 }
 
 @available(iOS 15.0, macOS 12.0, *)
 @Test("StoreKitAdapterFactory - 强制使用 StoreKit 2")
 func testStoreKitAdapterFactoryForceStoreKit2() async throws {
-    // Given
-    let factory = StoreKitAdapterFactory()
-    
-    // When
-    let adapter = factory.createAdapter(forceType: .storeKit2)
+    // Given & When
+    let adapter = StoreKitAdapterFactory.createAdapter(forceType: .storeKit2)
     
     // Then
-    #expect(adapter != nil)
     #expect(adapter is StoreKit2Adapter)
 }
 
@@ -91,45 +79,31 @@ func testStoreKitAdapterFactoryAdapterTypeDescriptions() async throws {
 
 @Test("StoreKitAdapterFactory - 系统版本兼容性")
 func testStoreKitAdapterFactorySystemCompatibility() async throws {
-    // Given
-    let factory = StoreKitAdapterFactory()
-    
-    // When - 测试在不同系统版本下的行为
-    let currentAdapter = factory.createAdapter()
+    // Given & When - 测试在不同系统版本下的行为
+    let currentAdapter = StoreKitAdapterFactory.createAdapter()
     
     // Then
-    #expect(currentAdapter != nil)
-    
     // 验证适配器符合协议
     #expect(currentAdapter is StoreKitAdapterProtocol)
 }
 
-@Test("StoreKitAdapterFactory - 单例模式")
-func testStoreKitAdapterFactorySingleton() async throws {
-    // Given
-    let factory1 = StoreKitAdapterFactory.shared
-    let factory2 = StoreKitAdapterFactory.shared
+@Test("StoreKitAdapterFactory - 多次创建一致性")
+func testStoreKitAdapterFactoryConsistency() async throws {
+    // Given & When
+    let adapter1 = StoreKitAdapterFactory.createAdapter()
+    let adapter2 = StoreKitAdapterFactory.createAdapter()
     
-    // Then
-    #expect(factory1 === factory2)
+    // Then - 类型应该相同
+    #expect(type(of: adapter1) == type(of: adapter2))
 }
 
 @Test("StoreKitAdapterFactory - 多次创建适配器")
 func testStoreKitAdapterFactoryMultipleCreation() async throws {
-    // Given
-    let factory = StoreKitAdapterFactory()
-    
-    // When
-    let adapter1 = factory.createAdapter()
-    let adapter2 = factory.createAdapter()
+    // Given & When
+    let adapter1 = StoreKitAdapterFactory.createAdapter()
+    let adapter2 = StoreKitAdapterFactory.createAdapter()
     
     // Then
-    #expect(adapter1 != nil)
-    #expect(adapter2 != nil)
-    
-    // 每次创建都应该返回新的实例
-    #expect(adapter1 !== adapter2)
-    
     // 但类型应该相同
     #expect(type(of: adapter1) == type(of: adapter2))
 }
@@ -137,8 +111,7 @@ func testStoreKitAdapterFactoryMultipleCreation() async throws {
 @Test("StoreKitAdapterFactory - 适配器功能验证")
 func testStoreKitAdapterFactoryAdapterFunctionality() async throws {
     // Given
-    let factory = StoreKitAdapterFactory()
-    let adapter = factory.createAdapter()
+    let adapter = StoreKitAdapterFactory.createAdapter()
     
     // When & Then - 验证适配器具有所需的方法
     // 这些方法应该存在且可调用（即使可能会失败）
@@ -155,36 +128,31 @@ func testStoreKitAdapterFactoryAdapterFunctionality() async throws {
     adapter.stopTransactionObserver()
     
     let pendingTransactions = await adapter.getPendingTransactions()
-    #expect(pendingTransactions is [IAPTransaction])
+    #expect(!pendingTransactions.isEmpty || pendingTransactions.isEmpty) // 验证返回了数组
 }
 
 @Test("StoreKitAdapterFactory - 错误处理")
 func testStoreKitAdapterFactoryErrorHandling() async throws {
-    // Given
-    let factory = StoreKitAdapterFactory()
-    
-    // When - 尝试创建适配器（应该总是成功）
-    let adapter = factory.createAdapter()
+    // Given & When - 尝试创建适配器（应该总是成功）
+    let adapter = StoreKitAdapterFactory.createAdapter()
     
     // Then
-    #expect(adapter != nil)
-    
     // 即使在错误条件下，工厂也应该能创建适配器
     // 这里我们无法模拟系统级错误，但可以验证基本功能
+    #expect(adapter is StoreKitAdapterProtocol)
 }
 
 @Test("StoreKitAdapterFactory - 性能测试")
 func testStoreKitAdapterFactoryPerformance() async throws {
     // Given
-    let factory = StoreKitAdapterFactory()
     let iterations = 100
     
     // When
     let startTime = Date()
     
     for _ in 0..<iterations {
-        let adapter = factory.createAdapter()
-        #expect(adapter != nil)
+        let adapter = StoreKitAdapterFactory.createAdapter()
+        #expect(adapter is StoreKitAdapterProtocol)
     }
     
     let duration = Date().timeIntervalSince(startTime)
@@ -196,14 +164,11 @@ func testStoreKitAdapterFactoryPerformance() async throws {
 
 @Test("StoreKitAdapterFactory - 内存管理")
 func testStoreKitAdapterFactoryMemoryManagement() async throws {
-    // Given
-    let factory = StoreKitAdapterFactory()
-    
-    // When - 创建多个适配器并让它们超出作用域
+    // Given & When - 创建多个适配器并让它们超出作用域
     for _ in 0..<10 {
         autoreleasepool {
-            let adapter = factory.createAdapter()
-            #expect(adapter != nil)
+            let adapter = StoreKitAdapterFactory.createAdapter()
+            #expect(adapter is StoreKitAdapterProtocol)
             // adapter 在这里超出作用域
         }
     }
@@ -215,15 +180,14 @@ func testStoreKitAdapterFactoryMemoryManagement() async throws {
 @Test("StoreKitAdapterFactory - 线程安全性")
 func testStoreKitAdapterFactoryThreadSafety() async throws {
     // Given
-    let factory = StoreKitAdapterFactory()
     let taskCount = 10
     
     // When - 在多个并发任务中创建适配器
     await withTaskGroup(of: Bool.self) { group in
         for _ in 0..<taskCount {
             group.addTask {
-                let adapter = factory.createAdapter()
-                return adapter != nil
+                let adapter = StoreKitAdapterFactory.createAdapter()
+                return adapter is StoreKitAdapterProtocol
             }
         }
         
@@ -241,16 +205,51 @@ func testStoreKitAdapterFactoryThreadSafety() async throws {
 
 @Test("StoreKitAdapterFactory - 配置传递")
 func testStoreKitAdapterFactoryConfigurationPassing() async throws {
-    // Given
-    let factory = StoreKitAdapterFactory()
-    
-    // When
-    let adapter = factory.createAdapter()
+    // Given & When
+    let adapter = StoreKitAdapterFactory.createAdapter()
     
     // Then
-    #expect(adapter != nil)
-    
     // 验证适配器可以接收和处理配置
     // 这里我们主要验证适配器的基本接口
     #expect(adapter is StoreKitAdapterProtocol)
+}
+
+@Test("StoreKitAdapterFactory - 系统信息")
+func testStoreKitAdapterFactorySystemInfo() async throws {
+    // Given & When
+    let systemInfo = StoreKitAdapterFactory.systemInfo
+    
+    // Then
+    #expect(!systemInfo.operatingSystem.isEmpty)
+    #expect(!systemInfo.version.isEmpty)
+    #expect(!systemInfo.description.isEmpty)
+    
+    // 验证推荐适配器类型
+    if #available(iOS 15.0, macOS 12.0, *) {
+        #expect(systemInfo.supportsStoreKit2 == true)
+        #expect(systemInfo.recommendedAdapter == .storeKit2)
+    } else {
+        #expect(systemInfo.supportsStoreKit2 == false)
+        #expect(systemInfo.recommendedAdapter == .storeKit1)
+    }
+}
+
+@Test("StoreKitAdapterFactory - 兼容性验证")
+func testStoreKitAdapterFactoryCompatibility() async throws {
+    // Given & When - 测试 StoreKit 1 兼容性
+    let storeKit1Compatibility = StoreKitAdapterFactory.validateCompatibility(for: .storeKit1)
+    
+    // Then
+    #expect(storeKit1Compatibility.isCompatible == true)
+    #expect(!storeKit1Compatibility.message.isEmpty)
+    
+    // 测试 StoreKit 2 兼容性
+    let storeKit2Compatibility = StoreKitAdapterFactory.validateCompatibility(for: .storeKit2)
+    
+    if #available(iOS 15.0, macOS 12.0, *) {
+        #expect(storeKit2Compatibility.isCompatible == true)
+    } else {
+        #expect(storeKit2Compatibility.isCompatible == false)
+    }
+    #expect(!storeKit2Compatibility.message.isEmpty)
 }

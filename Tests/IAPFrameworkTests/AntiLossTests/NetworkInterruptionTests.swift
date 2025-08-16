@@ -10,7 +10,8 @@ func testPurchaseInterruptedByNetworkFailure() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator()
-    let purchaseService = PurchaseService(adapter: mockAdapter, receiptValidator: mockValidator)
+    let mockOrderService = MockOrderService.alwaysSucceeds()
+    let purchaseService = PurchaseService(adapter: mockAdapter, receiptValidator: mockValidator, orderService: mockOrderService)
     
     let testProduct = TestDataGenerator.generateProduct()
     
@@ -143,6 +144,7 @@ func testLongTermNetworkOutage() async throws {
         maxRetries: 5,
         baseDelay: 0.1,
         maxDelay: 1.0,
+        backoffMultiplier: 2.0,
         strategy: .exponential
     )
     let retryManager = RetryManager(configuration: config)

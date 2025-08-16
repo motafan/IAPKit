@@ -413,6 +413,547 @@ class RestoreManager {
 }
 ```
 
+## Order-Based Purchase Management
+
+The framework supports server-side order management for enhanced purchase tracking, analytics, and validation.
+
+### Basic Order-Based Purchase
+
+```swift
+class OrderBasedPurchaseManager {
+    private let iapManager = IAPManager.shared
+    
+    func purchaseWithUserInfo(_ product: IAPProduct) async {
+        // Prepare user information for the order
+        let userInfo: [String: Any] = [
+            "userID": "user_12345",
+            "campaign": "summer_sale_2024",
+            "source": "push_notification",
+            "platform": "iOS",
+            "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        ]
+        
+        do {
+            let result = try await iapManager.purchase(product, userInfo: userInfo)
+            
+            switch result {
+            case .success(let transaction, let order):
+                print("Purchase successful!")
+                print("Transaction ID: \(transaction.id)")
+                print("Order ID: \(order.id)")
+                print("Server Order ID: \(order.serverOrderID ?? "none")")
+                
+                // Activate feature with order context
+                await activateFeature(for: transaction.productID, order: order)
+                showSuccessMessage("Purchase completed successfully!")
+                
+            case .pending(let transaction, let order):
+                print("Purchase pending approval")
+                print("Order ID: \(order.id)")
+                showInfoMessage("Purchase is pending approval. Order ID: \(order.id)")
+                
+            case .cancelled(let order):
+                print("Purchase cancelled")
+                if let order = order {
+                    print("Order ID: \(order.id) was cancelled")
+                    // Log cancellation for analytics
+                    logOrderCancellation(order)
+                }
+                
+            case .failed(let error, let order):
+                print("Purchase failed: \(error.localizedDescription)")
+                if let order = order {
+                    print("Order ID: \(order.id) failed")
+                    // Log failure for analytics
+                    logOrderFailure(order, error: error)
+                }
+                showErrorMessage("Purchase failed: \(error.localizedDescription)")
+            }
+            
+        } catch {
+            handlePurchaseError(error)
+        }
+    }
+    
+    private func activateFeature(for productID: String, order: IAPOrder) async {
+        // Activate feature with order context for better tracking
+        switch productID {
+        case "com.app.premium":
+            UserDefaults.standard.set(true, forKey: "isPremiumUser")
+            UserDefaults.standard.set(order.id, forKey: "premiumOrderID")
+            
+        case "com.app.coins_100":
+            let currentCoins = UserDefaults.standard.integer(forKey: "userCoins")
+            UserDefaults.standard.set(currentCoins + 100, forKey: "userCoins")
+            
+            // Track coin purchase with order info
+            if let userID = order.userInfo?["userID"] {
+                logCoinPurchase(amount: 100, orderID: order.id, userID: userID)
+            }
+            
+        default:
+            break
+        }
+    }
+    
+    private func logOrderCancellation(_ order: IAPOrder) {
+        // Log to analytics service
+        print("Order cancelled: \(order.id) for product: \(order.productID)")
+    }
+    
+    private func logOrderFailure(_ order: IAPOrder, error: IAPError) {
+        // Log to analytics service
+        print("Order failed: \(order.id) for product: \(order.productID), error: \(error)")
+    }
+    
+    private func logCoinPurchase(amount: Int, orderID: String, userID: String) {
+        // Log to analytics service
+        print("Coin purchase: \(amount) coins, order: \(orderID), user: \(userID)")
+    }
+    
+    private func showSuccessMessage(_ message: String) {
+        // Show success message to user
+    }
+    
+    private func showInfoMessage(_ message: String) {
+        // Show info message to user
+    }
+    
+    private func showErrorMessage(_ message: String) {
+        // Show error message to user
+    }
+    
+    private func handlePurchaseError(_ error: Error) {
+        // Handle purchase error
+    }
+}
+```
+
+### Manual Order Creation and Management
+
+```swift
+class OrderManager {
+    private let iapManager = IAPManager.shared
+    
+    func createOrderBeforePurchase(_ product: IAPProduct) async {
+        let userInfo: [String: Any] = [
+            "userID": getCurrentUserID(),
+            "experiment": "pricing_test_v2",
+            "variant": "discount_20_percent"
+        ]
+        
+        do {
+            // Create order first
+            let order = try await iapManager.createOrder(for: product, userInfo: userInfo)
+            print("Order created: \(order.id)")
+            
+            // Show order details to user
+            showOrderCreated(order)
+            
+            // Monitor order status
+            await monitorOrderStatus(order)
+            
+            // Proceed with purchase when ready
+            let result = try await iapManager.purchase(product, userInfo: userInfo)
+            handlePurchaseResult(result)
+            
+        } catch {
+            handleOrderError(error)
+        }
+    }
+    
+    func monitorOrderStatus(_ order: IAPOrder) async {
+        var currentOrder = order
+        let maxAttempts = 30 // Monitor for up to 5 minutes (30 * 10 seconds)
+        var attempts = 0
+        
+        while !currentOrder.status.isTerminal && attempts < maxAttempts {
+            do {
+                let newStatus = try await iapManager.queryOrderStatus(currentOrder.id)
+                
+                if newStatus != currentOrder.status {
+                    print("Order status changed: \(currentOrder.status) -> \(newStatus)")
+                    currentOrder = currentOrder.withStatus(newStatus)
+                    
+                    // Update UI with new status
+                    updateOrderStatusUI(currentOrder)
+                    
+                    // Handle specific status changes
+                    switch newStatus {
+                    case .completed:
+                        showOrderCompleted(currentOrder)
+                        return
+                    case .failed:
+                        showOrderFailed(currentOrder)
+                        return
+                    case .cancelled:
+                        showOrderCancelled(currentOrder)
+                        return
+                    default:
+                        break
+                    }
+                }
+                
+                // Wait before next check
+                try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+                attempts += 1
+                
+            } catch {
+                print("Failed to query order status: \(error)")
+                break
+            }
+        }
+        
+        if attempts >= maxAttempts {
+            print("Order monitoring timed out for order: \(currentOrder.id)")
+        }
+    }
+    
+    func queryAllActiveOrders() async {
+        // This would require additional API support to get all active orders
+        // For now, we can track orders locally
+        let activeOrderIDs = getLocallyTrackedOrderIDs()
+        
+        for orderID in activeOrderIDs {
+            do {
+                let status = try await iapManager.queryOrderStatus(orderID)
+                print("Order \(orderID) status: \(status)")
+                
+                // Update local tracking
+                updateLocalOrderStatus(orderID, status: status)
+                
+            } catch {
+                print("Failed to query order \(orderID): \(error)")
+            }
+        }
+    }
+    
+    private func getCurrentUserID() -> String {
+        // Return current user ID from your user management system
+        return UserDefaults.standard.string(forKey: "currentUserID") ?? "anonymous"
+    }
+    
+    private func getLocallyTrackedOrderIDs() -> [String] {
+        // Return locally tracked order IDs
+        return UserDefaults.standard.stringArray(forKey: "activeOrderIDs") ?? []
+    }
+    
+    private func updateLocalOrderStatus(_ orderID: String, status: IAPOrderStatus) {
+        // Update local order status tracking
+        var orderStatuses = UserDefaults.standard.object(forKey: "orderStatuses") as? [String: String] ?? [:]
+        orderStatuses[orderID] = status.rawValue
+        UserDefaults.standard.set(orderStatuses, forKey: "orderStatuses")
+        
+        // Remove from active orders if terminal
+        if status.isTerminal {
+            var activeOrderIDs = UserDefaults.standard.stringArray(forKey: "activeOrderIDs") ?? []
+            activeOrderIDs.removeAll { $0 == orderID }
+            UserDefaults.standard.set(activeOrderIDs, forKey: "activeOrderIDs")
+        }
+    }
+    
+    private func showOrderCreated(_ order: IAPOrder) {
+        // Show order creation confirmation to user
+    }
+    
+    private func updateOrderStatusUI(_ order: IAPOrder) {
+        // Update UI with order status
+    }
+    
+    private func showOrderCompleted(_ order: IAPOrder) {
+        // Show order completion message
+    }
+    
+    private func showOrderFailed(_ order: IAPOrder) {
+        // Show order failure message
+    }
+    
+    private func showOrderCancelled(_ order: IAPOrder) {
+        // Show order cancellation message
+    }
+    
+    private func handlePurchaseResult(_ result: IAPPurchaseResult) {
+        // Handle purchase result
+    }
+    
+    private func handleOrderError(_ error: Error) {
+        // Handle order error
+    }
+}
+```
+
+### Receipt Validation with Orders
+
+```swift
+class OrderReceiptValidator {
+    private let iapManager = IAPManager.shared
+    
+    func validatePurchaseWithOrder(_ transaction: IAPTransaction, order: IAPOrder) async {
+        guard let receiptData = transaction.receiptData else {
+            print("No receipt data available")
+            return
+        }
+        
+        do {
+            // Validate receipt with order information
+            let result = try await iapManager.validateReceipt(receiptData, with: order)
+            
+            if result.isValid {
+                print("Receipt and order validation successful")
+                print("Order ID: \(order.id)")
+                print("Server Order ID: \(order.serverOrderID ?? "none")")
+                
+                // Proceed with feature activation
+                await activateFeatureWithValidation(transaction: transaction, order: order)
+                
+            } else {
+                print("Receipt validation failed")
+                if let error = result.error {
+                    handleValidationError(error, order: order)
+                }
+            }
+            
+        } catch {
+            print("Validation error: \(error)")
+            handleValidationError(error, order: order)
+        }
+    }
+    
+    private func activateFeatureWithValidation(transaction: IAPTransaction, order: IAPOrder) async {
+        // Activate feature with both transaction and order context
+        let activationData = [
+            "transactionID": transaction.id,
+            "orderID": order.id,
+            "serverOrderID": order.serverOrderID ?? "",
+            "productID": transaction.productID,
+            "purchaseDate": transaction.purchaseDate.iso8601String,
+            "userInfo": order.userInfo ?? [:]
+        ] as [String : Any]
+        
+        // Store activation data for audit trail
+        storeActivationData(activationData)
+        
+        // Activate the actual feature
+        switch transaction.productID {
+        case "com.app.premium":
+            activatePremiumFeatures(with: activationData)
+        case "com.app.coins_100":
+            addCoins(100, with: activationData)
+        default:
+            print("Unknown product: \(transaction.productID)")
+        }
+    }
+    
+    private func handleValidationError(_ error: Error, order: IAPOrder) {
+        // Log validation error with order context
+        print("Validation failed for order \(order.id): \(error)")
+        
+        // Depending on your business logic, you might:
+        // 1. Retry validation
+        // 2. Allow the purchase to proceed with local validation only
+        // 3. Refund the purchase
+        // 4. Contact support
+        
+        if let iapError = error as? IAPError {
+            switch iapError {
+            case .serverOrderMismatch:
+                // Order and receipt don't match
+                print("Order and receipt mismatch - possible fraud attempt")
+                
+            case .orderExpired:
+                // Order expired before validation
+                print("Order expired before validation could complete")
+                
+            case .orderValidationFailed:
+                // General order validation failure
+                print("Order validation failed")
+                
+            default:
+                print("Other validation error: \(iapError)")
+            }
+        }
+    }
+    
+    private func storeActivationData(_ data: [String: Any]) {
+        // Store activation data for audit trail
+        var activations = UserDefaults.standard.array(forKey: "purchaseActivations") as? [[String: Any]] ?? []
+        activations.append(data)
+        
+        // Keep only last 100 activations
+        if activations.count > 100 {
+            activations = Array(activations.suffix(100))
+        }
+        
+        UserDefaults.standard.set(activations, forKey: "purchaseActivations")
+    }
+    
+    private func activatePremiumFeatures(with data: [String: Any]) {
+        UserDefaults.standard.set(true, forKey: "isPremiumUser")
+        UserDefaults.standard.set(data["orderID"], forKey: "premiumOrderID")
+        UserDefaults.standard.set(Date(), forKey: "premiumActivationDate")
+    }
+    
+    private func addCoins(_ amount: Int, with data: [String: Any]) {
+        let currentCoins = UserDefaults.standard.integer(forKey: "userCoins")
+        UserDefaults.standard.set(currentCoins + amount, forKey: "userCoins")
+        
+        // Log coin addition with order context
+        var coinHistory = UserDefaults.standard.array(forKey: "coinHistory") as? [[String: Any]] ?? []
+        coinHistory.append([
+            "amount": amount,
+            "orderID": data["orderID"] ?? "",
+            "date": Date().iso8601String,
+            "type": "purchase"
+        ])
+        UserDefaults.standard.set(coinHistory, forKey: "coinHistory")
+    }
+}
+
+// Extension for ISO8601 date formatting
+extension Date {
+    var iso8601String: String {
+        let formatter = ISO8601DateFormatter()
+        return formatter.string(from: self)
+    }
+}
+```
+
+### Order-Based Analytics and Tracking
+
+```swift
+class OrderAnalytics {
+    private let iapManager = IAPManager.shared
+    
+    func trackPurchaseFlow(_ product: IAPProduct, userInfo: [String: Any]) async {
+        // Track purchase initiation
+        logEvent("purchase_initiated", parameters: [
+            "product_id": product.id,
+            "product_name": product.displayName,
+            "price": product.price.doubleValue,
+            "currency": product.priceLocale.currencyCode ?? "USD"
+        ])
+        
+        do {
+            let result = try await iapManager.purchase(product, userInfo: userInfo)
+            
+            switch result {
+            case .success(let transaction, let order):
+                // Track successful purchase
+                logEvent("purchase_completed", parameters: [
+                    "transaction_id": transaction.id,
+                    "order_id": order.id,
+                    "server_order_id": order.serverOrderID ?? "",
+                    "product_id": product.id,
+                    "price": product.price.doubleValue,
+                    "user_id": userInfo["userID"] as? String ?? "",
+                    "campaign": userInfo["campaign"] as? String ?? "",
+                    "source": userInfo["source"] as? String ?? ""
+                ])
+                
+                // Track order completion time
+                let completionTime = Date().timeIntervalSince(order.createdAt)
+                logEvent("order_completion_time", parameters: [
+                    "order_id": order.id,
+                    "completion_time_seconds": completionTime
+                ])
+                
+            case .pending(let transaction, let order):
+                // Track pending purchase
+                logEvent("purchase_pending", parameters: [
+                    "transaction_id": transaction.id,
+                    "order_id": order.id,
+                    "product_id": product.id
+                ])
+                
+            case .cancelled(let order):
+                // Track cancellation
+                logEvent("purchase_cancelled", parameters: [
+                    "product_id": product.id,
+                    "order_id": order?.id ?? "",
+                    "cancellation_point": "user_action"
+                ])
+                
+            case .failed(let error, let order):
+                // Track failure
+                logEvent("purchase_failed", parameters: [
+                    "product_id": product.id,
+                    "order_id": order?.id ?? "",
+                    "error_type": String(describing: type(of: error)),
+                    "error_message": error.localizedDescription
+                ])
+            }
+            
+        } catch {
+            // Track error
+            logEvent("purchase_error", parameters: [
+                "product_id": product.id,
+                "error_type": String(describing: type(of: error)),
+                "error_message": error.localizedDescription
+            ])
+        }
+    }
+    
+    func generatePurchaseReport() async {
+        // Generate comprehensive purchase report
+        let activations = UserDefaults.standard.array(forKey: "purchaseActivations") as? [[String: Any]] ?? []
+        
+        var report: [String: Any] = [
+            "total_purchases": activations.count,
+            "purchase_breakdown": [:],
+            "revenue_by_product": [:],
+            "campaign_performance": [:]
+        ]
+        
+        var purchaseBreakdown: [String: Int] = [:]
+        var revenueByProduct: [String: Double] = [:]
+        var campaignPerformance: [String: Int] = [:]
+        
+        for activation in activations {
+            if let productID = activation["productID"] as? String {
+                purchaseBreakdown[productID, default: 0] += 1
+                
+                // Calculate revenue (you'd need to store price in activation data)
+                if let price = activation["price"] as? Double {
+                    revenueByProduct[productID, default: 0] += price
+                }
+                
+                // Track campaign performance
+                if let userInfo = activation["userInfo"] as? [String: String],
+                   let campaign = userInfo["campaign"] {
+                    campaignPerformance[campaign, default: 0] += 1
+                }
+            }
+        }
+        
+        report["purchase_breakdown"] = purchaseBreakdown
+        report["revenue_by_product"] = revenueByProduct
+        report["campaign_performance"] = campaignPerformance
+        
+        print("Purchase Report: \(report)")
+        
+        // Send to analytics service
+        sendReportToAnalytics(report)
+    }
+    
+    private func logEvent(_ eventName: String, parameters: [String: Any]) {
+        // Log to your analytics service (Firebase, Mixpanel, etc.)
+        print("Analytics Event: \(eventName)")
+        print("Parameters: \(parameters)")
+        
+        // Example: Firebase Analytics
+        // Analytics.logEvent(eventName, parameters: parameters)
+        
+        // Example: Custom analytics
+        // AnalyticsService.shared.track(event: eventName, properties: parameters)
+    }
+    
+    private func sendReportToAnalytics(_ report: [String: Any]) {
+        // Send comprehensive report to analytics service
+        print("Sending report to analytics: \(report)")
+    }
+}
+```
+
 ## Advanced Features
 
 ### Transaction Recovery

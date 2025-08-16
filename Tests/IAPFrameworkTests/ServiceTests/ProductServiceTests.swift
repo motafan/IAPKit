@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import IAPFramework
 
 // MARK: - ProductService 单元测试
@@ -23,7 +24,7 @@ func testProductServiceBasicLoading() async throws {
         expectedCount: testProducts.count,
         expectedIDs: Array(productIDs)
     )
-    #expect(verification.isValid, verification.summary)
+    #expect(verification.isValid, Comment(rawValue: verification.summary))
     #expect(mockAdapter.wasCalled("loadProducts"))
 }
 

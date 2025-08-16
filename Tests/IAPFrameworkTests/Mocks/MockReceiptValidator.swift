@@ -208,6 +208,18 @@ public final class MockReceiptValidator: ReceiptValidatorProtocol, @unchecked Se
         return callCounts
     }
     
+    /// 获取订单验证调用次数
+    /// - Returns: 调用次数
+    public func getOrderValidationCallCount() -> Int {
+        return getCallCount(for: "validateReceiptWithOrder")
+    }
+    
+    /// 检查是否同时验证了收据和订单
+    /// - Returns: 是否同时验证
+    public func wasReceiptAndOrderValidated() -> Bool {
+        return getOrderValidationCallCount() > 0
+    }
+    
     /// 获取所有验证过的订单
     /// - Returns: 订单列表
     public func getAllValidatedOrders() -> [IAPOrder] {

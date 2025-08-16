@@ -137,7 +137,7 @@ public struct IAPTransaction: Sendable, Identifiable, Equatable {
 }
 
 /// 交易状态枚举
-public enum IAPTransactionState: Sendable, Equatable {
+public enum IAPTransactionState: Sendable, Equatable, Hashable {
     /// 购买中
     case purchasing
     /// 购买成功
@@ -160,6 +160,22 @@ public enum IAPTransactionState: Sendable, Equatable {
             return lhsError.localizedDescription == rhsError.localizedDescription
         default:
             return false
+        }
+    }
+    
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .purchasing:
+            hasher.combine(0)
+        case .purchased:
+            hasher.combine(1)
+        case .restored:
+            hasher.combine(2)
+        case .deferred:
+            hasher.combine(3)
+        case .failed(let error):
+            hasher.combine(4)
+            hasher.combine(error.localizedDescription)
         }
     }
 }

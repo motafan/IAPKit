@@ -21,6 +21,13 @@ A modern, comprehensive In-App Purchase framework for iOS and macOS applications
 - **Smart Retry Logic**: Exponential backoff retry mechanism for failed transactions
 - **State Persistence**: Critical transaction states are persisted locally
 
+### 📋 Order Management
+- **Server-Side Orders**: Create orders on your server before processing payments
+- **Purchase Attribution**: Track purchase sources, campaigns, and user context
+- **Enhanced Analytics**: Rich data for business intelligence and reporting
+- **Order Validation**: Additional security layer with order-receipt matching
+- **Flexible UserInfo**: Associate custom data with every purchase
+
 ### ⚡ Performance & Reliability
 - **Intelligent Caching**: Smart product information caching with configurable expiration
 - **Concurrency Safe**: Built with Swift Concurrency (`async/await`, `@MainActor`)
@@ -127,6 +134,8 @@ class StoreViewController: UIViewController {
 
 ### Making Purchases
 
+#### Basic Purchase
+
 ```swift
 private func purchaseProduct(_ product: IAPProduct) {
     Task {
@@ -135,15 +144,81 @@ private func purchaseProduct(_ product: IAPProduct) {
             
             await MainActor.run {
                 switch result {
-                case .success(let transaction):
+                case .success(let transaction, let order):
                     showSuccess("Purchase completed successfully!")
+                    print("Order ID: \(order.id)")
                     activateFeature(for: transaction.productID)
                     
-                case .pending(let transaction):
+                case .pending(let transaction, let order):
                     showInfo("Purchase is pending approval")
+                    print("Order ID: \(order.id)")
                     
-                case .cancelled, .userCancelled:
+                case .cancelled(let order):
                     showInfo("Purchase was cancelled")
+                    if let order = order {
+                        print("Cancelled Order ID: \(order.id)")
+                    }
+                    
+                case .failed(let error, let order):
+                    showError("Purchase failed: \(error.localizedDescription)")
+                    if let order = order {
+                        print("Failed Order ID: \(order.id)")
+                    }
+                }
+            }
+            
+        } catch {
+            await MainActor.run {
+                showError(error)
+            }
+        }
+    }
+}
+```
+
+#### Purchase with User Information
+
+```swift
+private func purchaseWithUserInfo(_ product: IAPProduct) {
+    Task {
+        do {
+            // Include user context and attribution data
+            let userInfo: [String: Any] = [
+                "userID": "user_12345",
+                "campaign": "summer_sale_2024",
+                "source": "push_notification",
+                "screen": "premium_features",
+                "experiment": "pricing_test_v2",
+                "variant": "discount_20_percent"
+            ]
+            
+            let result = try await iapManager.purchase(product, userInfo: userInfo)
+            
+            await MainActor.run {
+                switch result {
+                case .success(let transaction, let order):
+                    showSuccess("Purchase completed successfully!")
+                    print("Transaction ID: \(transaction.id)")
+                    print("Order ID: \(order.id)")
+                    print("Server Order ID: \(order.serverOrderID ?? "none")")
+                    
+                    // Activate feature with order context
+                    activateFeatureWithOrder(for: transaction.productID, order: order)
+                    
+                case .pending(let transaction, let order):
+                    showInfo("Purchase pending approval")
+                    trackPendingPurchase(order: order)
+                    
+                case .cancelled(let order):
+                    if let order = order {
+                        trackCancelledPurchase(order: order)
+                    }
+                    
+                case .failed(let error, let order):
+                    showError("Purchase failed: \(error.localizedDescription)")
+                    if let order = order {
+                        trackFailedPurchase(order: order, error: error)
+                    }
                 }
             }
             
@@ -213,11 +288,29 @@ class IAPStore: ObservableObject {
         }
     }
     
-    func purchase(_ product: IAPProduct) {
+    func purchase(_ product: IAPProduct, userInfo: [String: Any]? = nil) {
         Task {
             do {
-                let result = try await iapManager.purchase(product)
-                // Handle purchase result
+                let result = try await iapManager.purchase(product, userInfo: userInfo)
+                
+                switch result {
+                case .success(let transaction, let order):
+                    // Handle successful purchase
+                    print("Purchase successful! Order: \(order.id)")
+                case .pending(let transaction, let order):
+                    // Handle pending purchase
+                    print("Purchase pending. Order: \(order.id)")
+                case .cancelled(let order):
+                    // Handle cancellation
+                    if let order = order {
+                        print("Purchase cancelled. Order: \(order.id)")
+                    }
+                case .failed(let error, let order):
+                    errorMessage = error.localizedDescription
+                    if let order = order {
+                        print("Purchase failed. Order: \(order.id)")
+                    }
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -281,6 +374,9 @@ await customManager.initialize()
 // Local validation (basic)
 let result = try await iapManager.validateReceipt(receiptData)
 
+// Validation with order information (enhanced security)
+let result = try await iapManager.validateReceipt(receiptData, with: order)
+
 // Custom remote validation
 class CustomReceiptValidator: ReceiptValidatorProtocol {
     func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult {
@@ -288,12 +384,216 @@ class CustomReceiptValidator: ReceiptValidatorProtocol {
         // Send receiptData to your server
         // Return validation result
     }
+    
+    func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult {
+        // Enhanced validation with order information
+        // Send both receiptData and order to your server
+        // Validate order-receipt consistency
+        // Return comprehensive validation result
+    }
 }
 
 let config = IAPConfiguration.default
 let customValidator = CustomReceiptValidator()
 let manager = IAPManager(configuration: config, receiptValidator: customValidator)
 ```
+
+### Order Management
+
+```swift
+// Create order before purchase (optional)
+let userInfo = ["userID": "12345", "campaign": "summer_sale"]
+let order = try await iapManager.createOrder(for: product, userInfo: userInfo)
+print("Order created: \(order.id)")
+
+// Query order status
+let status = try await iapManager.queryOrderStatus(order.id)
+print("Order status: \(status.localizedDescription)")
+
+// Monitor order until completion
+func monitorOrder(_ order: IAPOrder) async {
+    var currentOrder = order
+    
+    while !currentOrder.status.isTerminal {
+        let newStatus = try await iapManager.queryOrderStatus(currentOrder.id)
+        
+        if newStatus != currentOrder.status {
+            print("Order status changed: \(currentOrder.status) -> \(newStatus)")
+            currentOrder = currentOrder.withStatus(newStatus)
+            
+            // Handle status changes
+            switch newStatus {
+            case .completed:
+                print("Order completed successfully!")
+                return
+            case .failed:
+                print("Order failed")
+                return
+            case .cancelled:
+                print("Order was cancelled")
+                return
+            default:
+                break
+            }
+        }
+        
+        // Wait before next check
+        try await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+    }
+}
+```
+
+## 📋 Order Management Deep Dive
+
+### Why Use Order Management?
+
+Order management provides several key benefits:
+
+- **Enhanced Analytics**: Track purchase attribution, user behavior, and campaign effectiveness
+- **Fraud Prevention**: Additional validation layer with order-receipt matching
+- **Business Intelligence**: Rich data for reporting, A/B testing, and user segmentation
+- **Compliance**: Meet regulatory requirements for purchase tracking and auditing
+- **Customer Support**: Better tools for handling purchase-related inquiries
+
+### Order Lifecycle
+
+```swift
+// 1. Order Creation (automatic with purchase)
+let userInfo = [
+    "userID": "user_12345",
+    "campaign": "summer_sale_2024",
+    "source": "push_notification",
+    "experiment": "pricing_test_v2"
+]
+
+let result = try await iapManager.purchase(product, userInfo: userInfo)
+
+// 2. Order Status Tracking
+switch result {
+case .success(let transaction, let order):
+    // Order completed successfully
+    print("Order \(order.id) completed")
+    
+case .pending(let transaction, let order):
+    // Order is pending (e.g., awaiting parental approval)
+    await monitorOrderUntilCompletion(order)
+    
+case .cancelled(let order):
+    // Order was cancelled by user
+    if let order = order {
+        logOrderCancellation(order)
+    }
+    
+case .failed(let error, let order):
+    // Order failed for some reason
+    if let order = order {
+        logOrderFailure(order, error: error)
+    }
+}
+```
+
+### Advanced Order Features
+
+```swift
+// Manual order creation (for complex flows)
+let order = try await iapManager.createOrder(for: product, userInfo: userInfo)
+
+// Order status queries
+let currentStatus = try await iapManager.queryOrderStatus(order.id)
+
+// Order properties
+print("Order ID: \(order.id)")
+print("Product ID: \(order.productID)")
+print("Created: \(order.createdAt)")
+print("Status: \(order.status.localizedDescription)")
+print("Is Active: \(order.isActive)")
+print("Is Expired: \(order.isExpired)")
+
+// User information access
+if let userInfo = order.userInfo {
+    print("User ID: \(userInfo["userID"] ?? "unknown")")
+    print("Campaign: \(userInfo["campaign"] ?? "none")")
+}
+```
+
+### Order Analytics Integration
+
+```swift
+class OrderAnalytics {
+    func trackPurchaseFlow(_ product: IAPProduct, userInfo: [String: Any]) async {
+        // Track purchase initiation
+        logEvent("purchase_initiated", parameters: [
+            "product_id": product.id,
+            "price": product.price.doubleValue,
+            "user_id": userInfo["userID"] as? String ?? "",
+            "campaign": userInfo["campaign"] as? String ?? ""
+        ])
+        
+        do {
+            let result = try await iapManager.purchase(product, userInfo: userInfo)
+            
+            switch result {
+            case .success(let transaction, let order):
+                // Track successful purchase with rich context
+                logEvent("purchase_completed", parameters: [
+                    "transaction_id": transaction.id,
+                    "order_id": order.id,
+                    "server_order_id": order.serverOrderID ?? "",
+                    "product_id": product.id,
+                    "price": product.price.doubleValue,
+                    "completion_time": Date().timeIntervalSince(order.createdAt)
+                ])
+                
+            case .failed(let error, let order):
+                // Track failure with order context
+                logEvent("purchase_failed", parameters: [
+                    "product_id": product.id,
+                    "order_id": order?.id ?? "",
+                    "error_type": String(describing: type(of: error)),
+                    "error_message": error.localizedDescription
+                ])
+            }
+        } catch {
+            // Track errors
+            logEvent("purchase_error", parameters: [
+                "product_id": product.id,
+                "error": error.localizedDescription
+            ])
+        }
+    }
+    
+    private func logEvent(_ name: String, parameters: [String: Any]) {
+        // Send to your analytics service
+        print("Analytics: \(name) - \(parameters)")
+    }
+}
+```
+
+### Migration from Basic Purchases
+
+If you're currently using basic purchases without orders, migration is straightforward:
+
+```swift
+// Before (basic purchase)
+let result = try await iapManager.purchase(product)
+
+// After (order-based purchase)
+let result = try await iapManager.purchase(product, userInfo: userInfo)
+
+// The result structure changes slightly:
+switch result {
+case .success(let transaction, let order):  // Now includes order
+    // Handle success with order context
+case .pending(let transaction, let order):  // Now includes order
+    // Handle pending with order context
+case .cancelled(let order):                 // Now includes optional order
+    // Handle cancellation with order context
+case .failed(let error, let order):         // Now includes optional order
+    // Handle failure with order context
+}
+```
+
+The framework maintains backward compatibility - you can still call `purchase(product)` without userInfo, and it will work as before but with enhanced result information.
 
 ## 🔧 Advanced Usage
 
@@ -466,6 +766,7 @@ print(report.summary)
 - **`IAPManager`**: Main interface for all IAP operations
 - **`IAPProduct`**: Represents an App Store product
 - **`IAPTransaction`**: Represents a purchase transaction
+- **`IAPOrder`**: Represents a server-side order with user context
 - **`IAPError`**: Framework-specific error types
 
 ### Configuration
@@ -476,9 +777,10 @@ print(report.summary)
 ### Services
 
 - **`ProductService`**: Product loading and caching
-- **`PurchaseService`**: Purchase processing
+- **`PurchaseService`**: Purchase processing with order management
+- **`OrderService`**: Server-side order creation and tracking
 - **`TransactionMonitor`**: Transaction monitoring
-- **`ReceiptValidator`**: Receipt validation
+- **`ReceiptValidator`**: Receipt validation with order support
 
 ## 🤝 Contributing
 

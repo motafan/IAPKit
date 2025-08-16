@@ -425,10 +425,6 @@ private final class TransactionObserver: NSObject, SKPaymentTransactionObserver,
         self.purchaseCompletion = completion
         self.currentPurchaseProductID = productID
         
-        let payment = SKPayment(product: SKProduct())
-        // 注意：这里需要先获取 SKProduct，但为了简化，我们直接使用商品ID
-        // 在实际实现中，应该先调用 loadProducts 获取 SKProduct
-        
         // 创建支付请求
         let mutablePayment = SKMutablePayment()
         mutablePayment.productIdentifier = productID

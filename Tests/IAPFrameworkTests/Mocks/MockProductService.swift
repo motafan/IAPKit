@@ -20,7 +20,10 @@ public final class MockProductService: @unchecked Sendable {
     public var mockDelay: TimeInterval = 0
     
     /// 模拟的缓存统计信息
-    public var mockCacheStats: CacheStats = CacheStats(totalItems: 0, validItems: 0, expiredItems: 0)
+    public var mockCacheStats: CacheStats = CacheStats(
+        productStats: ProductCacheStats(totalItems: 0, validItems: 0, expiredItems: 0),
+        orderStats: OrderCacheStats(totalOrders: 0, pendingOrders: 0, completedOrders: 0, failedOrders: 0, expiredOrders: 0)
+    )
     
     /// 模拟的商品ID验证结果
     public var mockValidationResult: ProductIDValidationResult?
@@ -201,7 +204,10 @@ public final class MockProductService: @unchecked Sendable {
         mockError = nil
         shouldThrowError = false
         mockDelay = 0
-        mockCacheStats = CacheStats(totalItems: 0, validItems: 0, expiredItems: 0)
+        mockCacheStats = CacheStats(
+            productStats: ProductCacheStats(totalItems: 0, validItems: 0, expiredItems: 0),
+            orderStats: OrderCacheStats(totalOrders: 0, pendingOrders: 0, completedOrders: 0, failedOrders: 0, expiredOrders: 0)
+        )
         mockValidationResult = nil
         callCounts.removeAll()
         callParameters.removeAll()

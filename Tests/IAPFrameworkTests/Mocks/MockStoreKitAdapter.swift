@@ -41,6 +41,9 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
     /// 交易更新处理器
     public var transactionUpdateHandler: ((IAPTransaction) -> Void)?
     
+    /// 订单关联的交易映射
+    public private(set) var orderTransactionMapping: [String: String] = [:]
+    
     // MARK: - Initialization
     
     public init() {}
@@ -80,12 +83,16 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
             return result
         }
         
-        // 默认返回成功结果
+        // 默认返回成功结果，包含订单信息
         let transaction = IAPTransaction.successful(
             id: "mock_tx_\(UUID().uuidString)",
             productID: product.id
         )
-        return .success(transaction)
+        let order = IAPOrder.created(
+            id: "mock_order_\(UUID().uuidString)",
+            productID: product.id
+        )
+        return .success(transaction, order)
     }
     
     public func restorePurchases() async throws -> [IAPTransaction] {
@@ -186,6 +193,28 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
         transactionUpdateHandler?(transaction)
     }
     
+    /// 关联订单和交易
+    /// - Parameters:
+    ///   - orderID: 订单ID
+    ///   - transactionID: 交易ID
+    public func associateOrderWithTransaction(orderID: String, transactionID: String) {
+        orderTransactionMapping[orderID] = transactionID
+    }
+    
+    /// 获取订单关联的交易ID
+    /// - Parameter orderID: 订单ID
+    /// - Returns: 交易ID（如果存在）
+    public func getTransactionID(for orderID: String) -> String? {
+        return orderTransactionMapping[orderID]
+    }
+    
+    /// 获取交易关联的订单ID
+    /// - Parameter transactionID: 交易ID
+    /// - Returns: 订单ID（如果存在）
+    public func getOrderID(for transactionID: String) -> String? {
+        return orderTransactionMapping.first { $0.value == transactionID }?.key
+    }
+    
     /// 模拟多个交易更新
     /// - Parameter transactions: 交易列表
     public func simulateTransactionUpdates(_ transactions: [IAPTransaction]) {
@@ -209,6 +238,7 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
         callParameters.removeAll()
         isTransactionObserverActive = false
         transactionUpdateHandler = nil
+        orderTransactionMapping.removeAll()
     }
     
     /// 获取方法调用次数
@@ -305,12 +335,22 @@ extension MockStoreKitAdapter {
             id: "success_tx_\(product.id)",
             productID: product.id
         )
-        setMockPurchaseResult(.success(transaction))
+        let order = IAPOrder.created(
+            id: "success_order_\(product.id)",
+            productID: product.id
+        )
+        setMockPurchaseResult(.success(transaction, order))
+        associateOrderWithTransaction(orderID: order.id, transactionID: transaction.id)
     }
     
     /// 配置取消购买场景
-    public func configureCancelledPurchase() {
-        setMockPurchaseResult(.cancelled)
+    /// - Parameter order: 关联的订单（可选）
+    public func configureCancelledPurchase(order: IAPOrder? = nil) {
+        let defaultOrder = order ?? IAPOrder.created(
+            id: "cancelled_order_\(UUID().uuidString)",
+            productID: "test_product"
+        )
+        setMockPurchaseResult(.cancelled(defaultOrder))
     }
     
     /// 配置失败购买场景

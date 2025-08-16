@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import IAPFramework
 
 // MARK: - TransactionMonitor 单元测试

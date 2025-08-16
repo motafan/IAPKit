@@ -36,6 +36,16 @@ struct SwiftUIExampleStoreView: View {
     /// 显示恢复确认
     @State private var showingRestoreConfirmation = false
     
+    /// 显示订单详情
+    @State private var showingOrderDetails = false
+    @State private var selectedOrder: IAPOrder?
+    
+    /// 显示用户信息输入
+    @State private var showingUserInfoInput = false
+    @State private var selectedProduct: IAPProduct?
+    @State private var userID = ""
+    @State private var campaignCode = ""
+    
     /// 搜索文本
     @State private var searchText = ""
     
@@ -54,6 +64,9 @@ struct SwiftUIExampleStoreView: View {
             .navigationBarTitleDisplayMode(.large)
             .searchable(text: $searchText, prompt: "搜索商品")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    ordersButton
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     restoreButton
                 }
@@ -82,6 +95,28 @@ struct SwiftUIExampleStoreView: View {
                 Button("取消", role: .cancel) { }
             } message: {
                 Text("这将恢复您之前购买的所有项目")
+            }
+            .sheet(isPresented: $showingOrderDetails) {
+                if let order = selectedOrder {
+                    OrderDetailsView(order: order, iapManager: iapManager)
+                }
+            }
+            .sheet(isPresented: $showingUserInfoInput) {
+                if let product = selectedProduct {
+                    UserInfoInputView(
+                        product: product,
+                        userID: $userID,
+                        campaignCode: $campaignCode,
+                        onPurchase: { userInfo in
+                            Task {
+                                await purchaseProductWithUserInfo(product, userInfo: userInfo)
+                            }
+                        },
+                        onCancel: {
+                            selectedProduct = nil
+                        }
+                    )
+                }
             }
         }
     }
@@ -182,10 +217,20 @@ struct SwiftUIExampleStoreView: View {
                     ProductCardView(
                         product: product,
                         purchaseState: iapManager.purchaseState(for: product.id),
+                        activeOrder: iapManager.getActiveOrder(for: product.id),
+                        isCreatingOrder: iapManager.isCreatingOrder(product.id),
                         onPurchase: {
+                            selectedProduct = product
+                            showingUserInfoInput = true
+                        },
+                        onQuickPurchase: {
                             Task {
                                 await purchaseProduct(product)
                             }
+                        },
+                        onOrderDetails: { order in
+                            selectedOrder = order
+                            showingOrderDetails = true
                         }
                     )
                 }
@@ -202,6 +247,31 @@ struct SwiftUIExampleStoreView: View {
             Image(systemName: "arrow.clockwise")
         }
         .disabled(iapManager.isRestoringPurchases)
+    }
+    
+    /// 订单按钮
+    private var ordersButton: some View {
+        Button(action: {
+            // 显示最近的订单
+            if let recentOrder = iapManager.recentOrders.first {
+                selectedOrder = recentOrder
+                showingOrderDetails = true
+            }
+        }) {
+            HStack(spacing: 4) {
+                Image(systemName: "doc.text")
+                if !iapManager.activeOrders.isEmpty {
+                    Text("\(iapManager.activeOrders.count)")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.red)
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                }
+            }
+        }
+        .disabled(iapManager.recentOrders.isEmpty)
     }
     
     // MARK: - Computed Properties
@@ -226,6 +296,8 @@ struct SwiftUIExampleStoreView: View {
             return "恢复中"
         } else if iapManager.isRecoveryInProgress {
             return "恢复交易"
+        } else if !iapManager.creatingOrders.isEmpty {
+            return "创建订单"
         } else if !iapManager.purchasingProducts.isEmpty {
             return "购买中"
         }
@@ -256,30 +328,50 @@ struct SwiftUIExampleStoreView: View {
         }
     }
     
-    /// 购买商品
+    /// 购买商品（快速购买，不输入用户信息）
     private func purchaseProduct(_ product: IAPProduct) async {
+        await purchaseProductWithUserInfo(product, userInfo: nil)
+    }
+    
+    /// 购买商品（包含用户信息）
+    private func purchaseProductWithUserInfo(_ product: IAPProduct, userInfo: [String: Any]?) async {
         do {
-            let result = try await iapManager.purchase(product)
+            let result = try await iapManager.purchase(product, userInfo: userInfo)
             
             switch result {
-            case .success(let transaction):
-                successMessage = "成功购买 \(product.displayName)"
+            case .success(let transaction, let order):
+                successMessage = "成功购买 \(product.displayName)\n订单ID: \(order.id)"
                 showingSuccessAlert = true
                 
                 // 自动完成交易（如果配置允许）
                 try await iapManager.finishTransaction(transaction)
                 
-            case .pending:
-                successMessage = "购买请求已提交，等待处理"
+            case .pending(let transaction, let order):
+                successMessage = "购买请求已提交，等待处理\n订单ID: \(order.id)"
                 showingSuccessAlert = true
                 
-            case .cancelled, .userCancelled:
-                // 用户取消，不显示消息
-                break
+            case .cancelled(let order):
+                if let order = order {
+                    successMessage = "购买已取消\n订单ID: \(order.id)"
+                    showingSuccessAlert = true
+                }
+                
+            case .failed(let error, let order):
+                if let order = order {
+                    successMessage = "购买失败: \(error.localizedDescription)\n订单ID: \(order.id)"
+                } else {
+                    successMessage = "购买失败: \(error.localizedDescription)"
+                }
+                showingSuccessAlert = true
             }
         } catch {
             showingErrorAlert = true
         }
+        
+        // 清理选中的商品
+        selectedProduct = nil
+        userID = ""
+        campaignCode = ""
     }
     
     /// 恢复购买
@@ -305,7 +397,11 @@ struct SwiftUIExampleStoreView: View {
 private struct ProductCardView: View {
     let product: IAPProduct
     let purchaseState: IAPPurchaseState
+    let activeOrder: IAPOrder?
+    let isCreatingOrder: Bool
     let onPurchase: () -> Void
+    let onQuickPurchase: () -> Void
+    let onOrderDetails: (IAPOrder) -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -344,6 +440,11 @@ private struct ProductCardView: View {
                 .foregroundColor(.secondary)
                 .lineLimit(3)
             
+            // 订单信息（如果有活跃订单）
+            if let order = activeOrder {
+                orderInfoView(order)
+            }
+            
             // 底部操作区域
             HStack {
                 // 购买状态指示器
@@ -351,8 +452,8 @@ private struct ProductCardView: View {
                 
                 Spacer()
                 
-                // 购买按钮
-                purchaseButton
+                // 购买按钮组
+                purchaseButtonGroup
             }
         }
         .padding()
@@ -372,35 +473,66 @@ private struct ProductCardView: View {
             .cornerRadius(8)
     }
     
-    /// 购买按钮
-    private var purchaseButton: some View {
-        Button(action: onPurchase) {
-            HStack(spacing: 8) {
-                if case .purchasing = purchaseState {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: purchaseButtonIcon)
+    /// 购买按钮组
+    private var purchaseButtonGroup: some View {
+        HStack(spacing: 8) {
+            // 快速购买按钮
+            Button(action: onQuickPurchase) {
+                HStack(spacing: 6) {
+                    if case .purchasing = purchaseState {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "cart")
+                    }
+                    Text("快速购买")
+                        .font(.caption)
                 }
-                
-                Text(purchaseButtonText)
-                    .fontWeight(.medium)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
-            .frame(minWidth: 100)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .buttonStyle(.bordered)
+            .disabled(isPurchaseDisabled)
+            .controlSize(.small)
+            
+            // 主购买按钮（带用户信息）
+            Button(action: onPurchase) {
+                HStack(spacing: 8) {
+                    if isCreatingOrder {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: purchaseButtonIcon)
+                    }
+                    
+                    Text(purchaseButtonText)
+                        .fontWeight(.medium)
+                }
+                .frame(minWidth: 80)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isPurchaseDisabled || isCreatingOrder)
+            .controlSize(.regular)
         }
-        .buttonStyle(.borderedProminent)
-        .disabled(isPurchaseDisabled)
-        .controlSize(.regular)
     }
     
     /// 购买状态视图
     private var purchaseStatusView: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 4) {
+            // 购买状态
             switch purchaseState {
             case .idle:
-                EmptyView()
+                if isCreatingOrder {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                        Text("创建订单中...")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
+                }
                 
             case .purchasing:
                 HStack(spacing: 6) {
@@ -450,6 +582,77 @@ private struct ProductCardView: View {
         }
     }
     
+    /// 订单信息视图
+    private func orderInfoView(_ order: IAPOrder) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("订单信息")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
+                    
+                    HStack(spacing: 12) {
+                        // 订单状态
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(orderStatusColor(order.status))
+                                .frame(width: 8, height: 8)
+                            Text(order.status.localizedDescription)
+                                .font(.caption2)
+                                .foregroundColor(orderStatusColor(order.status))
+                        }
+                        
+                        // 订单ID（简短版本）
+                        Text("ID: \(String(order.id.prefix(8)))")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        
+                        // 创建时间
+                        Text(orderTimeText(order.createdAt))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                // 订单详情按钮
+                Button("详情") {
+                    onOrderDetails(order)
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+            }
+        }
+    }
+    
+    /// 订单状态颜色
+    private func orderStatusColor(_ status: IAPOrderStatus) -> Color {
+        switch status {
+        case .created:
+            return .blue
+        case .pending:
+            return .orange
+        case .completed:
+            return .green
+        case .cancelled:
+            return .gray
+        case .failed:
+            return .red
+        }
+    }
+    
+    /// 订单时间文本
+    private func orderTimeText(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+    
     // MARK: - Computed Properties
     
     /// 商品类型文本
@@ -487,7 +690,7 @@ private struct ProductCardView: View {
             return "购买中..."
         case .purchased:
             return "已拥有"
-        case .failed:
+        case .failed(_):
             return "重试"
         default:
             return "购买"
@@ -499,7 +702,7 @@ private struct ProductCardView: View {
         switch purchaseState {
         case .purchased:
             return "checkmark"
-        case .failed:
+        case .failed(_):
             return "arrow.clockwise"
         default:
             return "cart"
@@ -529,6 +732,240 @@ private struct ProductCardView: View {
             return "年"
         @unknown default:
             return "周期"
+        }
+    }
+}
+
+// MARK: - User Info Input View
+
+/// 用户信息输入视图
+private struct UserInfoInputView: View {
+    let product: IAPProduct
+    @Binding var userID: String
+    @Binding var campaignCode: String
+    let onPurchase: ([String: Any]) -> Void
+    let onCancel: () -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    HStack {
+                        Text(product.displayName)
+                            .fontWeight(.medium)
+                        Spacer()
+                        Text(product.localizedPrice)
+                            .fontWeight(.bold)
+                            .foregroundColor(.blue)
+                    }
+                    
+                    Text(product.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } header: {
+                    Text("商品信息")
+                }
+                
+                Section {
+                    TextField("用户ID（可选）", text: $userID)
+                        .textFieldStyle(.roundedBorder)
+                    
+                    TextField("活动代码（可选）", text: $campaignCode)
+                        .textFieldStyle(.roundedBorder)
+                } header: {
+                    Text("用户信息")
+                } footer: {
+                    Text("这些信息将与您的订单关联，用于更好的服务和统计")
+                }
+                
+                Section {
+                    Button("确认购买") {
+                        var userInfo: [String: Any] = [:]
+                        if !userID.isEmpty {
+                            userInfo["userID"] = userID
+                        }
+                        if !campaignCode.isEmpty {
+                            userInfo["campaign"] = campaignCode
+                        }
+                        
+                        onPurchase(userInfo)
+                        dismiss()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .navigationTitle("购买确认")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("取消") {
+                        onCancel()
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Order Details View
+
+/// 订单详情视图
+private struct OrderDetailsView: View {
+    let order: IAPOrder
+    let iapManager: SwiftUIIAPManager
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var isRefreshing = false
+    @State private var currentStatus: IAPOrderStatus
+    
+    init(order: IAPOrder, iapManager: SwiftUIIAPManager) {
+        self.order = order
+        self.iapManager = iapManager
+        self._currentStatus = State(initialValue: order.status)
+    }
+    
+    var body: some View {
+        NavigationView {
+            List {
+                Section {
+                    DetailRow(title: "订单ID", value: order.id)
+                    DetailRow(title: "商品ID", value: order.productID)
+                    DetailRow(title: "服务器订单ID", value: order.serverOrderID ?? "无")
+                } header: {
+                    Text("基本信息")
+                }
+                
+                Section {
+                    HStack {
+                        Text("状态")
+                        Spacer()
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(statusColor(currentStatus))
+                                .frame(width: 10, height: 10)
+                            Text(currentStatus.localizedDescription)
+                                .foregroundColor(statusColor(currentStatus))
+                        }
+                    }
+                    
+                    DetailRow(title: "创建时间", value: formatDate(order.createdAt))
+                    
+                    if let expiresAt = order.expiresAt {
+                        DetailRow(title: "过期时间", value: formatDate(expiresAt))
+                        
+                        HStack {
+                            Text("是否过期")
+                            Spacer()
+                            Text(order.isExpired ? "是" : "否")
+                                .foregroundColor(order.isExpired ? .red : .green)
+                        }
+                    }
+                } header: {
+                    Text("状态信息")
+                }
+                
+                if let userInfo = order.userInfo, !userInfo.isEmpty {
+                    Section {
+                        ForEach(Array(userInfo.keys.sorted()), id: \.self) { key in
+                            DetailRow(title: key, value: userInfo[key] ?? "")
+                        }
+                    } header: {
+                        Text("用户信息")
+                    }
+                }
+                
+                if let amount = order.amount, let currency = order.currency {
+                    Section {
+                        DetailRow(title: "金额", value: "\(amount) \(currency)")
+                    } header: {
+                        Text("支付信息")
+                    }
+                }
+                
+                Section {
+                    Button("刷新状态") {
+                        Task {
+                            await refreshOrderStatus()
+                        }
+                    }
+                    .disabled(isRefreshing)
+                    
+                    if isRefreshing {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("刷新中...")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("操作")
+                }
+            }
+            .navigationTitle("订单详情")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("完成") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func refreshOrderStatus() async {
+        isRefreshing = true
+        
+        do {
+            let newStatus = try await iapManager.queryOrderStatus(order.id)
+            currentStatus = newStatus
+        } catch {
+            print("刷新订单状态失败: \(error)")
+        }
+        
+        isRefreshing = false
+    }
+    
+    private func statusColor(_ status: IAPOrderStatus) -> Color {
+        switch status {
+        case .created:
+            return .blue
+        case .pending:
+            return .orange
+        case .completed:
+            return .green
+        case .cancelled:
+            return .gray
+        case .failed:
+            return .red
+        }
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+
+/// 详情行视图
+private struct DetailRow: View {
+    let title: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.trailing)
         }
     }
 }

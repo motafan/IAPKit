@@ -18,7 +18,7 @@ public final class UIKitIAPManager {
     // MARK: - Delegate Protocol
     
     /// UIKit IAP 管理器委托协议
-    public protocol Delegate: AnyObject {
+    @MainActor public protocol Delegate: AnyObject {
         func iapManager(_ manager: UIKitIAPManager, didLoadProducts products: [IAPProduct])
         func iapManager(_ manager: UIKitIAPManager, didFailToLoadProducts error: IAPError)
         func iapManager(_ manager: UIKitIAPManager, didCompletePurchase result: IAPPurchaseResult)
@@ -28,6 +28,10 @@ public final class UIKitIAPManager {
         func iapManager(_ manager: UIKitIAPManager, didUpdateTransaction transaction: IAPTransaction)
         func iapManager(_ manager: UIKitIAPManager, didUpdateLoadingState isLoading: Bool)
         func iapManager(_ manager: UIKitIAPManager, didUpdatePurchasingProducts productIDs: Set<String>)
+        func iapManager(_ manager: UIKitIAPManager, didUpdateCreatingOrders productIDs: Set<String>)
+        func iapManager(_ manager: UIKitIAPManager, didCreateOrder order: IAPOrder)
+        func iapManager(_ manager: UIKitIAPManager, didFailToCreateOrder error: IAPError, for productID: String)
+        func iapManager(_ manager: UIKitIAPManager, didUpdateOrder order: IAPOrder)
     }
     
     // MARK: - Properties
@@ -65,6 +69,21 @@ public final class UIKitIAPManager {
     /// 最近的交易列表
     public private(set) var recentTransactions: [IAPTransaction] = []
     
+    /// 活跃的订单列表
+    public private(set) var activeOrders: [IAPOrder] = []
+    
+    /// 最近的订单列表
+    public private(set) var recentOrders: [IAPOrder] = []
+    
+    /// 正在创建订单的商品ID集合
+    public private(set) var creatingOrders: Set<String> = [] {
+        didSet {
+            if oldValue != creatingOrders {
+                delegate?.iapManager(self, didUpdateCreatingOrders: creatingOrders)
+            }
+        }
+    }
+    
     /// 最后的错误信息
     public private(set) var lastError: IAPError?
     
@@ -86,9 +105,9 @@ public final class UIKitIAPManager {
     }
     
     deinit {
-        Task { @MainActor in
-            cleanup()
-        }
+        // In Swift 6, we cannot use Task in deinit as it may outlive the object
+        // The cleanup will be handled by the app lifecycle or manual calls
+        stopStatusMonitoring()
     }
     
     // MARK: - Public Methods
@@ -149,8 +168,8 @@ public final class UIKitIAPManager {
         }
     }
     
-    /// 购买商品
-    public func purchase(_ product: IAPProduct, completion: @escaping (Result<IAPPurchaseResult, IAPError>) -> Void) {
+    /// 购买商品（使用订单）
+    public func purchase(_ product: IAPProduct, userInfo: [String: Any]? = nil, completion: @escaping (Result<IAPPurchaseResult, IAPError>) -> Void) {
         guard !purchasingProducts.contains(product.id) else {
             completion(.failure(.configurationError("Product is already being purchased")))
             return
@@ -161,14 +180,23 @@ public final class UIKitIAPManager {
         
         Task {
             do {
-                let result = try await coreManager.purchase(product)
+                let result = try await coreManager.purchase(product, userInfo: userInfo)
                 
                 await MainActor.run {
                     self.purchasingProducts.remove(product.id)
                     
-                    // 更新最近交易
-                    if case .success(let transaction) = result {
+                    // 更新最近交易和订单
+                    switch result {
+                    case .success(let transaction, let order):
                         self.addRecentTransaction(transaction)
+                        self.addRecentOrder(order)
+                    case .pending(let transaction, let order):
+                        self.addRecentTransaction(transaction)
+                        self.addRecentOrder(order)
+                    case .cancelled(let order), .failed(_, let order):
+                        if let order = order {
+                            self.addRecentOrder(order)
+                        }
                     }
                     
                     self.delegate?.iapManager(self, didCompletePurchase: result)
@@ -184,6 +212,11 @@ public final class UIKitIAPManager {
                 }
             }
         }
+    }
+    
+    /// 购买商品（向后兼容，不使用订单）
+    public func purchaseWithoutOrder(_ product: IAPProduct, completion: @escaping (Result<IAPPurchaseResult, IAPError>) -> Void) {
+        purchase(product, userInfo: nil, completion: completion)
     }
     
     /// 恢复购买
@@ -258,6 +291,82 @@ public final class UIKitIAPManager {
         }
     }
     
+    /// 验证收据（包含订单信息）
+    public func validateReceipt(_ receiptData: Data, with order: IAPOrder, completion: @escaping (Result<IAPReceiptValidationResult, IAPError>) -> Void) {
+        clearError()
+        
+        Task {
+            do {
+                let result = try await coreManager.validateReceipt(receiptData, with: order)
+                
+                await MainActor.run {
+                    completion(.success(result))
+                }
+            } catch {
+                await MainActor.run {
+                    let iapError = error as? IAPError ?? .unknownError("Failed to validate receipt")
+                    self.lastError = iapError
+                    completion(.failure(iapError))
+                }
+            }
+        }
+    }
+    
+    /// 创建订单
+    public func createOrder(for product: IAPProduct, userInfo: [String: Any]? = nil, completion: @escaping (Result<IAPOrder, IAPError>) -> Void) {
+        guard !creatingOrders.contains(product.id) else {
+            completion(.failure(.configurationError("Order is already being created for this product")))
+            return
+        }
+        
+        creatingOrders.insert(product.id)
+        clearError()
+        
+        Task {
+            do {
+                let order = try await coreManager.createOrder(for: product, userInfo: userInfo)
+                
+                await MainActor.run {
+                    self.creatingOrders.remove(product.id)
+                    self.addActiveOrder(order)
+                    self.addRecentOrder(order)
+                    self.delegate?.iapManager(self, didCreateOrder: order)
+                    completion(.success(order))
+                }
+            } catch {
+                await MainActor.run {
+                    self.creatingOrders.remove(product.id)
+                    let iapError = error as? IAPError ?? .unknownError("Failed to create order")
+                    self.lastError = iapError
+                    self.delegate?.iapManager(self, didFailToCreateOrder: iapError, for: product.id)
+                    completion(.failure(iapError))
+                }
+            }
+        }
+    }
+    
+    /// 查询订单状态
+    public func queryOrderStatus(_ orderID: String, completion: @escaping (Result<IAPOrderStatus, IAPError>) -> Void) {
+        clearError()
+        
+        Task {
+            do {
+                let status = try await coreManager.queryOrderStatus(orderID)
+                
+                await MainActor.run {
+                    self.updateOrderStatus(orderID, status: status)
+                    completion(.success(status))
+                }
+            } catch {
+                await MainActor.run {
+                    let iapError = error as? IAPError ?? .unknownError("Failed to query order status")
+                    self.lastError = iapError
+                    completion(.failure(iapError))
+                }
+            }
+        }
+    }
+    
     /// 配置框架
     public func configure(with configuration: IAPConfiguration, completion: @escaping () -> Void = {}) {
         Task {
@@ -293,9 +402,24 @@ public final class UIKitIAPManager {
         return recentTransactions.first { $0.productID == productID }
     }
     
+    /// 获取指定商品的活跃订单
+    public func getActiveOrder(for productID: String) -> IAPOrder? {
+        return activeOrders.first { $0.productID == productID }
+    }
+    
+    /// 获取指定商品的最近订单
+    public func getRecentOrder(for productID: String) -> IAPOrder? {
+        return recentOrders.first { $0.productID == productID }
+    }
+    
+    /// 检查是否正在创建订单
+    public func isCreatingOrder(_ productID: String) -> Bool {
+        return creatingOrders.contains(productID)
+    }
+    
     /// 检查框架是否忙碌
     public var isBusy: Bool {
-        return isLoadingProducts || isRestoringPurchases || !purchasingProducts.isEmpty || isRecoveryInProgress
+        return isLoadingProducts || isRestoringPurchases || !purchasingProducts.isEmpty || !creatingOrders.isEmpty || isRecoveryInProgress
     }
     
     /// 获取本地化的错误消息
@@ -315,9 +439,12 @@ public final class UIKitIAPManager {
     }
     
     /// 停止状态监控
-    private func stopStatusMonitoring() {
-        statusUpdateTimer?.invalidate()
-        statusUpdateTimer = nil
+    private nonisolated func stopStatusMonitoring() {
+        // Use MainActor.assumeIsolated since we know this is safe for timer cleanup
+        MainActor.assumeIsolated {
+            statusUpdateTimer?.invalidate()
+            statusUpdateTimer = nil
+        }
     }
     
     /// 更新状态
@@ -355,6 +482,68 @@ public final class UIKitIAPManager {
         
         // 通知委托
         delegate?.iapManager(self, didUpdateTransaction: transaction)
+    }
+    
+    /// 添加活跃订单
+    private func addActiveOrder(_ order: IAPOrder) {
+        // 移除同一商品的旧活跃订单
+        activeOrders.removeAll { $0.productID == order.productID }
+        
+        // 只有非终态订单才添加到活跃列表
+        if !order.isTerminal {
+            activeOrders.insert(order, at: 0)
+        }
+        
+        // 限制活跃订单数量
+        if activeOrders.count > 20 {
+            activeOrders = Array(activeOrders.prefix(20))
+        }
+    }
+    
+    /// 添加最近订单
+    private func addRecentOrder(_ order: IAPOrder) {
+        // 移除同一订单ID的旧记录
+        recentOrders.removeAll { $0.id == order.id }
+        
+        // 添加新订单到开头
+        recentOrders.insert(order, at: 0)
+        
+        // 限制最近订单数量
+        if recentOrders.count > 20 {
+            recentOrders = Array(recentOrders.prefix(20))
+        }
+        
+        // 如果订单变为终态，从活跃列表中移除
+        if order.isTerminal {
+            activeOrders.removeAll { $0.id == order.id }
+        }
+        
+        // 通知委托
+        delegate?.iapManager(self, didUpdateOrder: order)
+    }
+    
+    /// 更新订单状态
+    private func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) {
+        // 更新活跃订单列表
+        if let index = activeOrders.firstIndex(where: { $0.id == orderID }) {
+            let updatedOrder = activeOrders[index].withStatus(status)
+            activeOrders[index] = updatedOrder
+            
+            // 如果订单变为终态，移动到最近订单列表
+            if status.isTerminal {
+                activeOrders.remove(at: index)
+                addRecentOrder(updatedOrder)
+            } else {
+                delegate?.iapManager(self, didUpdateOrder: updatedOrder)
+            }
+        }
+        
+        // 更新最近订单列表
+        if let index = recentOrders.firstIndex(where: { $0.id == orderID }) {
+            let updatedOrder = recentOrders[index].withStatus(status)
+            recentOrders[index] = updatedOrder
+            delegate?.iapManager(self, didUpdateOrder: updatedOrder)
+        }
     }
     
     /// 处理错误
@@ -404,6 +593,22 @@ public extension UIKitIAPManager.Delegate {
     }
     
     func iapManager(_ manager: UIKitIAPManager, didUpdatePurchasingProducts productIDs: Set<String>) {
+        // 默认实现为空
+    }
+    
+    func iapManager(_ manager: UIKitIAPManager, didUpdateCreatingOrders productIDs: Set<String>) {
+        // 默认实现为空
+    }
+    
+    func iapManager(_ manager: UIKitIAPManager, didCreateOrder order: IAPOrder) {
+        // 默认实现为空
+    }
+    
+    func iapManager(_ manager: UIKitIAPManager, didFailToCreateOrder error: IAPError, for productID: String) {
+        // 默认实现为空
+    }
+    
+    func iapManager(_ manager: UIKitIAPManager, didUpdateOrder order: IAPOrder) {
         // 默认实现为空
     }
 }

@@ -184,6 +184,329 @@ class RobustReceiptValidator: ReceiptValidatorProtocol {
 }
 ```
 
+### Order Management Issues
+
+#### Issue: Order creation fails or orders get stuck
+
+**Possible Causes:**
+1. Server-side order creation endpoint not configured
+2. Network connectivity issues during order creation
+3. Invalid user information in order request
+4. Server-side validation failures
+5. Order expiration before payment completion
+
+**Solutions:**
+
+```swift
+// 1. Handle order creation failures gracefully
+do {
+    let result = try await iapManager.purchase(product, userInfo: userInfo)
+    // Handle success
+} catch IAPError.orderCreationFailed(let message) {
+    print("Order creation failed: \(message)")
+    
+    // Fallback to direct purchase without order
+    do {
+        let fallbackResult = try await iapManager.purchase(product, userInfo: nil)
+        // Handle fallback success
+    } catch {
+        print("Fallback purchase also failed: \(error)")
+    }
+    
+} catch IAPError.orderExpired {
+    print("Order expired before payment could complete")
+    // Retry with new order
+    let retryResult = try await iapManager.purchase(product, userInfo: userInfo)
+    
+} catch IAPError.orderValidationFailed {
+    print("Order validation failed on server")
+    // Check order data and retry
+}
+
+// 2. Monitor order status for debugging
+func debugOrderStatus(_ order: IAPOrder) async {
+    print("Order Debug Info:")
+    print("- ID: \(order.id)")
+    print("- Product ID: \(order.productID)")
+    print("- Status: \(order.status)")
+    print("- Created: \(order.createdAt)")
+    print("- Expires: \(order.expiresAt?.description ?? "Never")")
+    print("- Is Expired: \(order.isExpired)")
+    print("- Is Active: \(order.isActive)")
+    print("- Server Order ID: \(order.serverOrderID ?? "None")")
+    
+    if let userInfo = order.userInfo {
+        print("- User Info: \(userInfo)")
+    }
+    
+    // Query current status from server
+    do {
+        let currentStatus = try await iapManager.queryOrderStatus(order.id)
+        print("- Current Server Status: \(currentStatus)")
+        
+        if currentStatus != order.status {
+            print("- Status mismatch detected!")
+        }
+    } catch {
+        print("- Failed to query server status: \(error)")
+    }
+}
+
+// 3. Implement order recovery mechanism
+class OrderRecoveryManager {
+    private let iapManager = IAPManager.shared
+    
+    func recoverStuckOrders() async {
+        let stuckOrderIDs = getLocallyTrackedOrderIDs()
+        
+        for orderID in stuckOrderIDs {
+            do {
+                let status = try await iapManager.queryOrderStatus(orderID)
+                print("Order \(orderID) status: \(status)")
+                
+                switch status {
+                case .completed:
+                    // Order completed, activate feature
+                    await handleCompletedOrder(orderID)
+                    
+                case .failed, .cancelled:
+                    // Order failed, clean up
+                    cleanupFailedOrder(orderID)
+                    
+                case .expired:
+                    // Order expired, remove from tracking
+                    removeExpiredOrder(orderID)
+                    
+                default:
+                    // Still in progress, continue monitoring
+                    continue
+                }
+                
+            } catch {
+                print("Failed to recover order \(orderID): \(error)")
+            }
+        }
+    }
+    
+    private func getLocallyTrackedOrderIDs() -> [String] {
+        return UserDefaults.standard.stringArray(forKey: "pendingOrderIDs") ?? []
+    }
+    
+    private func handleCompletedOrder(_ orderID: String) async {
+        // Activate features for completed order
+        print("Activating features for completed order: \(orderID)")
+    }
+    
+    private func cleanupFailedOrder(_ orderID: String) {
+        // Remove failed order from tracking
+        var pendingOrders = getLocallyTrackedOrderIDs()
+        pendingOrders.removeAll { $0 == orderID }
+        UserDefaults.standard.set(pendingOrders, forKey: "pendingOrderIDs")
+    }
+    
+    private func removeExpiredOrder(_ orderID: String) {
+        cleanupFailedOrder(orderID) // Same cleanup process
+    }
+}
+```
+
+#### Issue: Order and receipt validation mismatch
+
+**Possible Causes:**
+1. Order ID not properly associated with transaction
+2. Server-side order and receipt data inconsistency
+3. Timing issues between order creation and payment
+4. Multiple orders created for same product
+
+**Solutions:**
+
+```swift
+// 1. Implement robust order-receipt validation
+func validateOrderReceiptConsistency(_ transaction: IAPTransaction, order: IAPOrder) async throws {
+    // Basic consistency checks
+    guard transaction.productID == order.productID else {
+        throw IAPError.serverOrderMismatch
+    }
+    
+    // Check timing - transaction should be after order creation
+    guard transaction.purchaseDate >= order.createdAt else {
+        throw IAPError.serverOrderMismatch
+    }
+    
+    // Validate with server
+    guard let receiptData = transaction.receiptData else {
+        throw IAPError.invalidReceiptData
+    }
+    
+    do {
+        let result = try await iapManager.validateReceipt(receiptData, with: order)
+        
+        if !result.isValid {
+            // Log detailed validation failure
+            print("Order-Receipt validation failed:")
+            print("- Transaction ID: \(transaction.id)")
+            print("- Order ID: \(order.id)")
+            print("- Product ID: \(transaction.productID)")
+            print("- Purchase Date: \(transaction.purchaseDate)")
+            print("- Order Created: \(order.createdAt)")
+            
+            if let error = result.error {
+                print("- Validation Error: \(error)")
+            }
+            
+            throw IAPError.orderValidationFailed
+        }
+        
+    } catch {
+        print("Order-receipt validation error: \(error)")
+        throw error
+    }
+}
+
+// 2. Handle validation failures gracefully
+func handleValidationFailure(_ transaction: IAPTransaction, order: IAPOrder, error: Error) async {
+    print("Validation failed for transaction \(transaction.id) and order \(order.id)")
+    
+    if let iapError = error as? IAPError {
+        switch iapError {
+        case .serverOrderMismatch:
+            // Possible fraud or system error
+            print("Order-receipt mismatch detected")
+            // Log for security review
+            logSecurityEvent("order_receipt_mismatch", data: [
+                "transaction_id": transaction.id,
+                "order_id": order.id,
+                "product_id": transaction.productID
+            ])
+            
+        case .orderValidationFailed:
+            // Server couldn't validate order
+            print("Server order validation failed")
+            // Retry validation or escalate to support
+            
+        case .orderExpired:
+            // Order expired before validation
+            print("Order expired during validation")
+            // May need to create new order or refund
+            
+        default:
+            print("Other validation error: \(iapError)")
+        }
+    }
+    
+    // Decide on recovery action based on business logic
+    await decideRecoveryAction(transaction: transaction, order: order, error: error)
+}
+
+private func decideRecoveryAction(transaction: IAPTransaction, order: IAPOrder, error: Error) async {
+    // Business logic for handling validation failures
+    // Options:
+    // 1. Retry validation
+    // 2. Allow purchase with local validation only
+    // 3. Refund the purchase
+    // 4. Escalate to customer support
+    // 5. Create new order and retry
+    
+    print("Deciding recovery action for failed validation...")
+}
+
+private func logSecurityEvent(_ event: String, data: [String: Any]) {
+    // Log security events for review
+    print("Security Event: \(event)")
+    print("Data: \(data)")
+    // Send to security monitoring system
+}
+```
+
+#### Issue: UserInfo parameter not working correctly
+
+**Possible Causes:**
+1. UserInfo contains non-serializable data
+2. Server doesn't support userInfo parameter
+3. UserInfo data too large
+4. Invalid data types in userInfo
+
+**Solutions:**
+
+```swift
+// 1. Validate userInfo before purchase
+func validateUserInfo(_ userInfo: [String: Any]?) -> [String: Any]? {
+    guard let userInfo = userInfo else { return nil }
+    
+    var validatedUserInfo: [String: Any] = [:]
+    
+    for (key, value) in userInfo {
+        // Only allow serializable types
+        switch value {
+        case is String, is Int, is Double, is Bool:
+            validatedUserInfo[key] = value
+        case let stringValue as String:
+            // Limit string length
+            if stringValue.count <= 1000 {
+                validatedUserInfo[key] = stringValue
+            } else {
+                print("Warning: UserInfo value for key '\(key)' too long, truncating")
+                validatedUserInfo[key] = String(stringValue.prefix(1000))
+            }
+        default:
+            print("Warning: UserInfo value for key '\(key)' is not serializable, skipping")
+        }
+    }
+    
+    // Check total size
+    do {
+        let data = try JSONSerialization.data(withJSONObject: validatedUserInfo)
+        if data.count > 10000 { // 10KB limit
+            print("Warning: UserInfo too large (\(data.count) bytes), may cause issues")
+        }
+    } catch {
+        print("Warning: UserInfo not JSON serializable: \(error)")
+        return nil
+    }
+    
+    return validatedUserInfo.isEmpty ? nil : validatedUserInfo
+}
+
+// 2. Use validated userInfo in purchases
+func safePurchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult {
+    let validatedUserInfo = validateUserInfo(userInfo)
+    
+    if userInfo != nil && validatedUserInfo == nil {
+        print("UserInfo validation failed, proceeding without userInfo")
+    }
+    
+    return try await iapManager.purchase(product, userInfo: validatedUserInfo)
+}
+
+// 3. Debug userInfo issues
+func debugUserInfo(_ userInfo: [String: Any]?) {
+    guard let userInfo = userInfo else {
+        print("UserInfo is nil")
+        return
+    }
+    
+    print("UserInfo Debug:")
+    print("- Key count: \(userInfo.count)")
+    
+    for (key, value) in userInfo {
+        print("- \(key): \(type(of: value)) = \(value)")
+    }
+    
+    // Test JSON serialization
+    do {
+        let data = try JSONSerialization.data(withJSONObject: userInfo)
+        print("- JSON size: \(data.count) bytes")
+        
+        // Test deserialization
+        let deserialized = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        print("- Serialization test: \(deserialized != nil ? "PASS" : "FAIL")")
+        
+    } catch {
+        print("- JSON serialization error: \(error)")
+    }
+}
+```
+
 ## Error Codes
 
 ### IAPError Types and Solutions
@@ -197,6 +520,12 @@ class RobustReceiptValidator: ReceiptValidatorProtocol {
 | `receiptValidationFailed` | Receipt validation error | Invalid receipt, server issue | Check validation logic |
 | `timeout` | Operation timed out | Slow network, server delay | Retry with longer timeout |
 | `storeKitError` | Underlying StoreKit error | Various StoreKit issues | Check underlying error |
+| `orderCreationFailed` | Order creation failed | Server endpoint issue, invalid data | Check server configuration, validate userInfo |
+| `orderNotFound` | Order not found on server | Order ID invalid, server sync issue | Verify order ID, check server logs |
+| `orderExpired` | Order expired before completion | Payment took too long | Retry with new order, adjust expiration time |
+| `orderAlreadyCompleted` | Order already processed | Duplicate processing attempt | Check order status before processing |
+| `orderValidationFailed` | Order validation failed | Order-receipt mismatch, server error | Validate order data, check server logs |
+| `serverOrderMismatch` | Order and receipt don't match | Timing issue, fraud attempt | Investigate order flow, security review |
 
 ### StoreKit Error Mapping
 

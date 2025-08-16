@@ -88,17 +88,50 @@ This ensures that purchases are never lost due to app crashes, network issues, o
 
 - **Local Validation**: Basic receipt format and signature verification
 - **Remote Validation**: Extensible interface for server-side validation
+- **Order-Based Validation**: Validate receipts with associated order information
 - **Custom Validators**: You can implement your own validation logic
 
 ```swift
 // Built-in local validation
 let result = try await iapManager.validateReceipt(receiptData)
 
+// Validation with order information
+let result = try await iapManager.validateReceipt(receiptData, with: order)
+
 // Custom server validation
 class MyReceiptValidator: ReceiptValidatorProtocol {
     func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult {
         // Your validation logic
     }
+}
+```
+
+### Q: What is order-based purchase management?
+
+**A:** Order-based purchase management is an advanced feature that creates server-side orders before processing payments. This provides several benefits:
+
+- **Enhanced Tracking**: Better analytics and purchase attribution
+- **Server Validation**: Orders can be validated on your server
+- **User Context**: Associate purchases with user information and campaigns
+- **Fraud Prevention**: Additional validation layer for security
+- **Business Intelligence**: Rich data for analytics and reporting
+
+```swift
+// Purchase with user information
+let userInfo = [
+    "userID": "12345",
+    "campaign": "summer_sale",
+    "source": "push_notification"
+]
+
+let result = try await iapManager.purchase(product, userInfo: userInfo)
+
+switch result {
+case .success(let transaction, let order):
+    print("Purchase successful! Order ID: \(order.id)")
+case .pending(let transaction, let order):
+    print("Purchase pending. Order ID: \(order.id)")
+// ... handle other cases
 }
 ```
 
@@ -279,6 +312,96 @@ class SecureReceiptValidator: ReceiptValidatorProtocol {
 }
 ```
 
+## Order Management
+
+### Q: When should I use order-based purchases?
+
+**A:** Order-based purchases are recommended when you need:
+
+- **Analytics and Attribution**: Track purchase sources, campaigns, and user behavior
+- **Server-Side Validation**: Additional security and fraud prevention
+- **Business Intelligence**: Rich data for reporting and analysis
+- **User Context**: Associate purchases with specific user actions or states
+- **Compliance**: Meet regulatory requirements for purchase tracking
+
+### Q: What information can I include in orders?
+
+**A:** You can include any serializable data in the `userInfo` parameter:
+
+```swift
+let userInfo: [String: Any] = [
+    // User identification
+    "userID": "user_12345",
+    "email": "user@example.com",
+    
+    // Marketing attribution
+    "campaign": "summer_sale_2024",
+    "source": "push_notification",
+    "medium": "mobile_app",
+    
+    // Purchase context
+    "screen": "premium_features",
+    "feature": "unlimited_storage",
+    
+    // A/B testing
+    "experiment": "pricing_test_v2",
+    "variant": "discount_20_percent",
+    
+    // Custom business data
+    "referral_code": "FRIEND2024",
+    "promo_code": "SAVE20"
+]
+```
+
+### Q: What happens if order creation fails?
+
+**A:** The framework handles order creation failures gracefully:
+
+1. **Automatic Fallback**: Falls back to direct purchase without order
+2. **Error Reporting**: Provides detailed error information
+3. **Retry Logic**: Implements intelligent retry mechanisms
+4. **Graceful Degradation**: Purchase can still succeed without order
+
+```swift
+do {
+    let result = try await iapManager.purchase(product, userInfo: userInfo)
+} catch IAPError.orderCreationFailed(let message) {
+    print("Order creation failed: \(message)")
+    // Framework automatically falls back to direct purchase
+}
+```
+
+### Q: How do I monitor order status?
+
+**A:** You can query order status at any time:
+
+```swift
+// Query current order status
+let status = try await iapManager.queryOrderStatus(orderID)
+
+// Monitor order until completion
+func monitorOrder(_ order: IAPOrder) async {
+    while !order.status.isTerminal {
+        let newStatus = try await iapManager.queryOrderStatus(order.id)
+        if newStatus != order.status {
+            print("Order status changed: \(order.status) -> \(newStatus)")
+            // Update UI or take action based on new status
+        }
+        try await Task.sleep(nanoseconds: 5_000_000_000) // Wait 5 seconds
+    }
+}
+```
+
+### Q: Can I use orders without a server?
+
+**A:** Orders are designed for server-side integration, but you can:
+
+1. **Use Local Orders**: Create orders locally for tracking
+2. **Skip Order Creation**: Use `purchase(product, userInfo: nil)` for direct purchases
+3. **Hybrid Approach**: Use orders when server is available, fallback when not
+
+The framework gracefully handles server unavailability.
+
 ## Troubleshooting
 
 ### Q: Products aren't loading, what should I check?
@@ -296,6 +419,35 @@ class SecureReceiptValidator: ReceiptValidatorProtocol {
 let validation = productService.validateProductIDs(productIDs)
 if !validation.isAllValid {
     print("Invalid IDs: \(validation.invalidIDs)")
+}
+```
+
+### Q: Order creation is failing, what should I check?
+
+**A:** Common order-related issues:
+
+1. **Server Configuration**: Ensure your order creation endpoint is configured
+2. **UserInfo Validation**: Check that userInfo contains only serializable data
+3. **Network Connectivity**: Verify internet connection for server communication
+4. **Server Response**: Check server logs for validation errors
+5. **Data Size**: Ensure userInfo isn't too large (recommended <10KB)
+
+```swift
+// Debug order creation
+func debugOrderCreation(_ product: IAPProduct, userInfo: [String: Any]?) {
+    print("Creating order for product: \(product.id)")
+    
+    if let userInfo = userInfo {
+        print("UserInfo: \(userInfo)")
+        
+        // Test JSON serialization
+        do {
+            let data = try JSONSerialization.data(withJSONObject: userInfo)
+            print("UserInfo size: \(data.count) bytes")
+        } catch {
+            print("UserInfo serialization error: \(error)")
+        }
+    }
 }
 ```
 

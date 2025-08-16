@@ -107,7 +107,7 @@ public final class MockOrderService: OrderServiceProtocol, @unchecked Sendable {
             status: .created,
             serverOrderID: serverOrderID,
             amount: product.price,
-            currency: product.priceLocale.currencyCode
+            currency: product.priceLocale.currency?.identifier
         )
         
         // Store order
@@ -529,7 +529,7 @@ extension MockOrderService {
             status: .created,
             serverOrderID: "server_\(serverOrderIDCounter)",
             amount: product.price,
-            currency: product.priceLocale.currencyCode
+            currency: product.priceLocale.currency?.identifier
         )
         
         serverOrderIDCounter += 1

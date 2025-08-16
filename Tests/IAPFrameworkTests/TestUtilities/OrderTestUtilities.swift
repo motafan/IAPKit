@@ -363,6 +363,7 @@ public struct OrderTestUtilities {
     ///   - mockService: Mock 服务
     ///   - expectedOperations: 期望的操作记录
     /// - Returns: 验证结果
+    @MainActor
     public static func verifyMockServiceOrderOperations(
         _ mockService: MockPurchaseService,
         expectedOperations: [String]
@@ -383,6 +384,7 @@ public struct OrderTestUtilities {
     ///   - mockService: Mock 服务
     ///   - expectedProductIDs: 期望创建订单的商品ID
     /// - Returns: 验证结果
+    @MainActor
     public static func verifyMockServiceOrderCreation(
         _ mockService: MockPurchaseService,
         expectedProductIDs: [String]
@@ -516,6 +518,7 @@ public struct OrderFlowTestUtilities {
     ///   - mockService: Mock 服务
     ///   - shouldSucceed: 是否应该成功
     /// - Returns: 购买结果和验证结果
+    @MainActor
     public static func simulateOrderPurchaseFlow(
         product: IAPProduct,
         mockService: MockPurchaseService,
@@ -560,6 +563,7 @@ public struct OrderFlowTestUtilities {
     ///   - orders: 要恢复的订单
     ///   - mockService: Mock 服务
     /// - Returns: 恢复结果和验证结果
+    @MainActor
     public static func simulateOrderRecoveryFlow(
         orders: [IAPOrder],
         mockService: MockPurchaseService

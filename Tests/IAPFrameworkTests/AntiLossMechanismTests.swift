@@ -111,11 +111,26 @@ func testRetryManagerRecordCleanup() async throws {
 func testRetryManagerExecuteWithRetry() async throws {
     // Given
     let retryManager = RetryManager()
-    var attemptCount = 0
+    
+    // 使用actor来安全地管理计数器
+    actor AttemptCounter {
+        private var count = 0
+        
+        func increment() -> Int {
+            count += 1
+            return count
+        }
+        
+        func getCount() -> Int {
+            return count
+        }
+    }
+    
+    let counter = AttemptCounter()
     
     // When - 执行会失败几次然后成功的操作
     let result = try await retryManager.executeWithRetry(operationId: "test_op") {
-        attemptCount += 1
+        let attemptCount = await counter.increment()
         if attemptCount < 3 {
             throw IAPError.networkError
         }
@@ -124,7 +139,8 @@ func testRetryManagerExecuteWithRetry() async throws {
     
     // Then
     #expect(result == "success")
-    #expect(attemptCount == 3)
+    let finalCount = await counter.getCount()
+    #expect(finalCount == 3)
     
     // 验证重试记录被清除（成功后）
     let record = await retryManager.getRecord(for: "test_op")
@@ -202,9 +218,13 @@ func testAntiLossTransactionMonitorHandlerManagement() async throws {
 func testTransactionRecoveryManagerBasicFunctionality() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
+    let mockOrderService = MockOrderService()
+    let mockCache = IAPCache(productCacheExpiration: 3600)
     let configuration = IAPConfiguration.default
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
+        orderService: mockOrderService,
+        cache: mockCache,
         configuration: configuration
     )
     
@@ -240,7 +260,13 @@ func testTransactionRecoveryManagerBasicFunctionality() async throws {
 func testTransactionRecoveryManagerEmptyQueue() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let recoveryManager = TransactionRecoveryManager(adapter: mockAdapter)
+    let mockOrderService = MockOrderService()
+    let mockCache = IAPCache(productCacheExpiration: 3600)
+    let recoveryManager = TransactionRecoveryManager(
+        adapter: mockAdapter,
+        orderService: mockOrderService,
+        cache: mockCache
+    )
     
     // 设置空的未完成交易队列
     await mockAdapter.setMockPendingTransactions([])
@@ -269,7 +295,13 @@ func testTransactionRecoveryManagerEmptyQueue() async throws {
 func testNetworkInterruptionScenario() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let recoveryManager = TransactionRecoveryManager(adapter: mockAdapter)
+    let mockOrderService = MockOrderService()
+    let mockCache = IAPCache(productCacheExpiration: 3600)
+    let recoveryManager = TransactionRecoveryManager(
+        adapter: mockAdapter,
+        orderService: mockOrderService,
+        cache: mockCache
+    )
     
     // 模拟网络中断导致的未完成交易
     let interruptedTransactions = [

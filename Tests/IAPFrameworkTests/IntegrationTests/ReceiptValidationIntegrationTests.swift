@@ -19,7 +19,7 @@ func testReceiptValidationLocalIntegration() async throws {
     
     // 本地验证应该至少检查格式
     let formatValid = localValidator.isReceiptFormatValid(receiptData)
-    #expect(formatValid is Bool) // 应该返回布尔值
+    #expect(formatValid == true) // 应该返回布尔值
 }
 
 @Test("ReceiptValidation - 远程验证集成")

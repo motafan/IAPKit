@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import IAPFramework
 
@@ -73,21 +74,26 @@ struct OrderBasedPurchaseFlowTests {
     func orderBasedPurchaseFlowOrderCreationFailure() async throws {
         // Given - Create test services and configure order creation to fail
         let (mockPurchaseService, mockOrderService, testProduct) = createTestServices()
-        await mockOrderService.setMockError(.orderCreationFailed(underlying: "Server error"), shouldThrow: true)
+        mockOrderService.setMockError(.orderCreationFailed(underlying: "Server error"), shouldThrow: true)
         
         // When & Then - Purchase should fail with order creation error
-        await #expect(throws: IAPError.self) {
+        do {
             _ = try await mockPurchaseService.purchase(testProduct, userInfo: nil)
-        } matching: { error in
-            if case .orderCreationFailed = error {
-                return true
+            Issue.record("Expected purchase to throw order creation error")
+        } catch let error as IAPError {
+            switch error {
+            case .orderCreationFailed:
+                break // Expected
+            default:
+                Issue.record("Expected order creation error, got \(error)")
             }
-            return false
+        } catch {
+            Issue.record("Expected IAPError, got \(error)")
         }
         
         // Verify order creation was attempted but purchase was not
-        #expect(await mockOrderService.wasCalled("createOrder"))
-        #expect(await mockPurchaseService.wasCalled("executeStoreKitPurchase") == false)
+        #expect(mockOrderService.wasCalled("createOrder"))
+        #expect(mockPurchaseService.wasCalled("executeStoreKitPurchase") == false)
     }
     
     /// Test order-based purchase flow with payment failure
@@ -102,23 +108,28 @@ struct OrderBasedPurchaseFlowTests {
             status: .created
         )
         
-        await mockOrderService.addMockOrder(order)
-        await mockPurchaseService.setMockError(.purchaseFailed(underlying: "Payment failed"), shouldThrow: true)
+        mockOrderService.addMockOrder(order)
+        mockPurchaseService.setMockError(.purchaseFailed(underlying: "Payment failed"), shouldThrow: true)
         
         // When & Then - Purchase should fail with payment error
-        await #expect(throws: IAPError.self) {
+        do {
             _ = try await mockPurchaseService.purchase(testProduct, userInfo: nil)
-        } matching: { error in
-            if case .purchaseFailed = error {
-                return true
+            Issue.record("Expected purchase to throw payment error")
+        } catch let error as IAPError {
+            switch error {
+            case .purchaseFailed:
+                break // Expected
+            default:
+                Issue.record("Expected payment error, got \(error)")
             }
-            return false
+        } catch {
+            Issue.record("Expected IAPError, got \(error)")
         }
         
         // Verify order was created but payment failed
-        #expect(await mockOrderService.wasCalled("createOrder"))
+        #expect(mockOrderService.wasCalled("createOrder"))
         // Order should be cleaned up after payment failure
-        let failedOrder = await mockOrderService.getOrder(order.id)
+        let failedOrder = mockOrderService.getOrder(order.id)
         #expect(failedOrder?.status == .failed || failedOrder == nil)
     }
     
@@ -139,13 +150,18 @@ struct OrderBasedPurchaseFlowTests {
             productID: testProduct.id
         )
         
-        await mockOrderService.addMockOrder(order)
-        await mockPurchaseService.setMockPurchaseResult(.success(transaction, order))
-        await mockPurchaseService.setMockReceiptValidationError(.receiptValidationFailed)
+        mockOrderService.addMockOrder(order)
+        mockPurchaseService.setMockPurchaseResult(.success(transaction, order))
+        mockPurchaseService.setMockReceiptValidationError(.receiptValidationFailed)
         
         // When & Then - Purchase should fail with validation error
-        await #expect(throws: IAPError.receiptValidationFailed) {
+        do {
             _ = try await mockPurchaseService.purchase(testProduct, userInfo: nil)
+            Issue.record("Expected purchase to throw receipt validation error")
+        } catch IAPError.receiptValidationFailed {
+            // Expected
+        } catch {
+            Issue.record("Expected receipt validation error, got \(error)")
         }
     }
     
@@ -163,8 +179,8 @@ struct OrderBasedPurchaseFlowTests {
             status: .created
         )
         
-        await mockOrderService.addMockOrder(order)
-        await mockPurchaseService.setMockPurchaseResult(.cancelled(order))
+        mockOrderService.addMockOrder(order)
+        mockPurchaseService.setMockPurchaseResult(.cancelled(order))
         
         // When - Execute purchase (which will be cancelled)
         let result = try await mockPurchaseService.purchase(testProduct, userInfo: nil)
@@ -180,7 +196,7 @@ struct OrderBasedPurchaseFlowTests {
         }
         
         // Verify order was cancelled
-        let updatedOrder = await mockOrderService.getOrder(order.id)
+        let updatedOrder = mockOrderService.getOrder(order.id)
         #expect(updatedOrder?.status == .cancelled)
     }
     
@@ -207,8 +223,8 @@ struct OrderBasedPurchaseFlowTests {
         let receiptData = TestDataGenerator.generateReceiptData()
         
         // Configure mock services
-        await mockOrderService.addMockOrder(order)
-        await mockPurchaseService.setMockReceiptValidationResult(
+        mockOrderService.addMockOrder(order)
+        mockPurchaseService.setMockReceiptValidationResult(
             .init(isValid: true, transactions: [transaction])
         )
         
@@ -221,14 +237,14 @@ struct OrderBasedPurchaseFlowTests {
         #expect(result.transactions.first?.productID == testProduct.id)
         
         // Verify validation was called with order information
-        #expect(await mockPurchaseService.wasCalled("validateReceiptWithOrder"))
+        #expect(mockPurchaseService.wasCalled("validateReceiptWithOrder"))
     }
     
     /// Test receipt validation with order mismatch
     @Test("Receipt validation fails with order mismatch")
     func receiptValidationWithOrderMismatch() async throws {
         // Given - Create test services and set up mismatched order and transaction
-        let (mockPurchaseService, _, testProduct) = createTestServices()
+        let (mockPurchaseService, _, _) = createTestServices()
         
         let order = TestDataGenerator.generateOrder(
             id: "test_order_123",
@@ -239,11 +255,16 @@ struct OrderBasedPurchaseFlowTests {
         let receiptData = TestDataGenerator.generateReceiptData()
         
         // Configure mock to detect mismatch
-        await mockPurchaseService.setMockReceiptValidationError(.serverOrderMismatch)
+        mockPurchaseService.setMockReceiptValidationError(.serverOrderMismatch)
         
         // When & Then - Validation should fail with mismatch error
-        await #expect(throws: IAPError.serverOrderMismatch) {
+        do {
             _ = try await mockPurchaseService.validateReceiptWithOrder(receiptData, order: order)
+            Issue.record("Expected validation to throw server order mismatch error")
+        } catch IAPError.serverOrderMismatch {
+            // Expected
+        } catch {
+            Issue.record("Expected server order mismatch error, got \(error)")
         }
     }
     
@@ -259,24 +280,26 @@ struct OrderBasedPurchaseFlowTests {
     func errorHandlingOrderCreationFailures(error: IAPError, description: String) async throws {
         // Given - Create test services
         let (mockPurchaseService, mockOrderService, testProduct) = createTestServices()
-        await mockOrderService.setMockError(error, shouldThrow: true)
+        mockOrderService.setMockError(error, shouldThrow: true)
         
         // When & Then
-        await #expect(throws: IAPError.self) {
+        do {
             _ = try await mockPurchaseService.purchase(testProduct, userInfo: nil)
-        } matching: { thrownError in
+            Issue.record("Expected purchase to throw error for scenario: \(description)")
+        } catch let thrownError as IAPError {
             // Verify the correct error was propagated
             switch (error, thrownError) {
             case (.networkError, .networkError),
                  (.orderCreationTimeout, .orderCreationTimeout),
                  (.orderServerUnavailable, .orderServerUnavailable):
-                return true
+                break // Expected
             case (.orderCreationFailed, .orderCreationFailed):
-                return true
+                break // Expected
             default:
                 Issue.record("Unexpected error for scenario \(description): expected \(error), got \(thrownError)")
-                return false
             }
+        } catch {
+            Issue.record("Expected IAPError for scenario \(description), got \(error)")
         }
     }
     
@@ -297,12 +320,17 @@ struct OrderBasedPurchaseFlowTests {
             status: .pending
         )
         
-        await mockOrderService.addMockOrder(order)
-        await mockPurchaseService.setMockReceiptValidationError(error)
+        mockOrderService.addMockOrder(order)
+        mockPurchaseService.setMockReceiptValidationError(error)
         
         // When & Then
-        await #expect(throws: error) {
+        do {
             _ = try await mockPurchaseService.purchase(testProduct, userInfo: nil)
+            Issue.record("Expected purchase to throw validation error for scenario: \(description)")
+        } catch let thrownError as IAPError {
+            #expect(thrownError == error, "Expected \(error) for scenario \(description), got \(thrownError)")
+        } catch {
+            Issue.record("Expected IAPError for scenario \(description), got \(error)")
         }
     }
     
@@ -418,7 +446,7 @@ struct OrderBasedPurchaseFlowTests {
         }
         
         // Verify orders were created for all products
-        let createdOrders = await mockOrderService.getAllOrders()
+        let createdOrders = mockOrderService.getAllOrders()
         #expect(createdOrders.count >= products.count)
     }
     
@@ -441,9 +469,9 @@ struct OrderBasedPurchaseFlowTests {
             productID: product.id
         )
         
-        await mockOrderService.addMockOrder(order)
-        await mockPurchaseService.setMockPurchaseResult(.success(transaction, order.withStatus(.completed)))
-        await mockPurchaseService.setMockReceiptValidationResult(
+        mockOrderService.addMockOrder(order)
+        mockPurchaseService.setMockPurchaseResult(.success(transaction, order.withStatus(.completed)))
+        mockPurchaseService.setMockReceiptValidationResult(
             .init(isValid: true, transactions: [transaction])
         )
     }
@@ -455,9 +483,9 @@ struct OrderBasedPurchaseFlowTests {
         order: IAPOrder,
         transaction: IAPTransaction
     ) async {
-        await mockOrderService.addMockOrder(order)
-        await mockPurchaseService.setMockPurchaseResult(.success(transaction, order.withStatus(.completed)))
-        await mockPurchaseService.setMockReceiptValidationResult(
+        mockOrderService.addMockOrder(order)
+        mockPurchaseService.setMockPurchaseResult(.success(transaction, order.withStatus(.completed)))
+        mockPurchaseService.setMockReceiptValidationResult(
             .init(isValid: true, transactions: [transaction])
         )
     }
@@ -468,13 +496,13 @@ struct OrderBasedPurchaseFlowTests {
         mockOrderService: MockOrderService
     ) async {
         // Verify order creation was called
-        #expect(await mockOrderService.wasCalled("createOrder"))
+        #expect(mockOrderService.wasCalled("createOrder"))
         
         // Verify purchase was executed
-        #expect(await mockPurchaseService.wasCalled("purchase"))
+        #expect(mockPurchaseService.wasCalled("purchase"))
         
         // Verify receipt validation was called
-        #expect(await mockPurchaseService.wasCalled("validateReceiptWithOrder"))
+        #expect(mockPurchaseService.wasCalled("validateReceiptWithOrder"))
     }
 }
 
@@ -482,20 +510,9 @@ struct OrderBasedPurchaseFlowTests {
 
 extension MockPurchaseService {
     
-    /// Set mock purchase result
-    func setMockPurchaseResult(_ result: IAPPurchaseResult) async {
-        // This would be implemented in the actual MockPurchaseService
-        // For now, we'll assume it exists
-    }
-    
-    /// Set mock receipt validation result
-    func setMockReceiptValidationResult(_ result: IAPReceiptValidationResult) async {
-        // This would be implemented in the actual MockPurchaseService
-    }
-    
     /// Set mock receipt validation error
-    func setMockReceiptValidationError(_ error: IAPError) async {
-        // This would be implemented in the actual MockPurchaseService
+    func setMockReceiptValidationError(_ error: IAPError) {
+        setMockError(error, shouldThrow: true)
     }
     
     /// Mock method for validating receipt with order
@@ -509,8 +526,6 @@ extension MockPurchaseService {
 
 extension IAPReceiptValidationResult {
     init(isValid: Bool, transactions: [IAPTransaction]) {
-        // This would use the actual IAPReceiptValidationResult initializer
-        // For now, we'll create a simplified version
         self.init(
             isValid: isValid,
             transactions: transactions,

@@ -1,8 +1,9 @@
 import Foundation
+import Testing
 @testable import IAPFramework
 
 /// 测试配置管理器，用于管理测试环境的配置
-public struct TestConfiguration {
+public struct TestConfiguration: Sendable {
     
     // MARK: - Default Test Configurations
     
@@ -204,7 +205,8 @@ public struct TestConfiguration {
 // MARK: - Test Environment Manager
 
 /// 测试环境管理器
-public class TestEnvironmentManager {
+@MainActor
+public final class TestEnvironmentManager {
     
     /// 单例实例
     public static let shared = TestEnvironmentManager()
@@ -326,9 +328,9 @@ public struct TestAssertions {
     ///   - timeout: 超时时间
     ///   - operation: 异步操作
     /// - Throws: 超时错误
-    public static func assertCompletes<T>(
+    public static func assertCompletes<T: Sendable>(
         within timeout: TimeInterval,
-        operation: @escaping () async throws -> T
+        operation: @escaping @Sendable () async throws -> T
     ) async throws -> T {
         return try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask {
@@ -354,9 +356,9 @@ public struct TestAssertions {
     ///   - expectedError: 期望的错误
     ///   - operation: 异步操作
     /// - Throws: 断言失败错误
-    public static func assertThrows<T>(
+    public static func assertThrows<T: Sendable>(
         _ expectedError: IAPError,
-        operation: @escaping () async throws -> T
+        operation: @escaping @Sendable () async throws -> T
     ) async throws {
         do {
             _ = try await operation()

@@ -22,8 +22,6 @@ func testBasicCompilation() async throws {
     let productService = ProductService(adapter: mockAdapter)
     
     // Then - 验证服务创建成功
-    #expect(purchaseService != nil)
-    #expect(productService != nil)
     
     // 验证基本功能
     let testProduct = TestDataGenerator.generateProduct()
@@ -45,7 +43,7 @@ func testMockObjects() async throws {
     let testProducts = TestDataGenerator.generateProducts(count: 2)
     mockAdapter.setMockProducts(testProducts)
     
-    let testOrder = TestDataGenerator.generateOrder(for: testProducts[0])
+    let testOrder = TestDataGenerator.generateOrder(productID: testProducts[0].id)
     mockOrderService.addMockOrder(testOrder)
     
     // Then - 验证 Mock 配置
@@ -61,7 +59,7 @@ func testDataGenerators() async throws {
     let product = TestDataGenerator.generateProduct()
     let products = TestDataGenerator.generateProducts(count: 3)
     let transaction = TestDataGenerator.generateSuccessfulTransaction(productID: product.id)
-    let order = TestDataGenerator.generateOrder(for: product)
+    let order = TestDataGenerator.generateOrder(productID: product.id)
     let config = TestDataGenerator.generateConfiguration()
     
     // Then - 验证生成的数据

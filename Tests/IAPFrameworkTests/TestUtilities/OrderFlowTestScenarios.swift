@@ -18,18 +18,18 @@ public struct OrderFlowTestScenarios {
             expectedOrder: expectedOrder,
             expectedResult: .success,
             mockConfiguration: { mockService in
-                mockService.configureOrderCreation(order: expectedOrder, shouldSucceed: true)
+                await mockService.configureOrderCreation(order: expectedOrder, shouldSucceed: true)
             },
             verification: { result, mockService in
                 var issues: [String] = []
                 
                 // 验证 Mock 服务调用
-                if !mockService.wasCalled("createOrder") {
+                if !(await mockService.wasCalled("createOrder")) {
                     issues.append("createOrder method was not called")
                 }
                 
                 // 验证创建的订单
-                let createdOrders = mockService.getAllCreatedOrders()
+                let createdOrders = await mockService.getAllCreatedOrders()
                 if createdOrders.isEmpty {
                     issues.append("No orders were created")
                 } else if createdOrders.first?.productID != product.id {
@@ -52,13 +52,13 @@ public struct OrderFlowTestScenarios {
             expectedOrder: nil,
             expectedResult: .failure,
             mockConfiguration: { mockService in
-                mockService.configureOrderCreation(shouldSucceed: false)
+                await mockService.configureOrderCreation(shouldSucceed: false)
             },
             verification: { result, mockService in
                 var issues: [String] = []
                 
-                if mockService.wasCalled("createOrder") {
-                    let createdOrders = mockService.getAllCreatedOrders()
+                if (await mockService.wasCalled("createOrder")) {
+                    let createdOrders = await mockService.getAllCreatedOrders()
                     if !createdOrders.isEmpty {
                         issues.append("Orders were created despite failure configuration")
                     }
@@ -81,7 +81,7 @@ public struct OrderFlowTestScenarios {
             expectedOrder: expiredOrder,
             expectedResult: .failure,
             mockConfiguration: { mockService in
-                mockService.configureOrderExpired()
+                await mockService.configureOrderExpired()
             },
             verification: { result, mockService in
                 var issues: [String] = []
@@ -110,8 +110,8 @@ public struct OrderFlowTestScenarios {
             expectedOrder: order,
             expectedResult: .success,
             mockConfiguration: { mockService in
-                mockService.configureSuccessfulPurchase(for: product)
-                mockService.configureOrderCreation(order: order)
+                await mockService.configureSuccessfulPurchase(for: product)
+                await mockService.configureOrderCreation(order: order)
             },
             verification: { result, mockService in
                 var issues: [String] = []
@@ -119,7 +119,7 @@ public struct OrderFlowTestScenarios {
                 // 验证购买流程调用
                 let expectedCalls = ["createOrder", "purchase", "validateReceiptWithOrder"]
                 for call in expectedCalls {
-                    if !mockService.wasCalled(call) {
+                    if !(await mockService.wasCalled(call)) {
                         issues.append("Expected call '\(call)' was not made")
                     }
                 }
@@ -149,7 +149,7 @@ public struct OrderFlowTestScenarios {
             expectedOrder: order,
             expectedResult: .cancelled,
             mockConfiguration: { mockService in
-                mockService.configureCancelledPurchase(order: order)
+                await mockService.configureCancelledPurchase(order: order)
             },
             verification: { result, mockService in
                 var issues: [String] = []
@@ -182,7 +182,7 @@ public struct OrderFlowTestScenarios {
             expectedOrder: nil,
             expectedResult: .failure,
             mockConfiguration: { mockService in
-                mockService.configureNetworkError()
+                await mockService.configureNetworkError()
             },
             verification: { result, mockService in
                 var issues: [String] = []
@@ -208,7 +208,7 @@ public struct OrderFlowTestScenarios {
             expectedOrder: order,
             expectedResult: .failure,
             mockConfiguration: { mockService in
-                mockService.configureOrderValidationFailed()
+                await mockService.configureOrderValidationFailed()
             },
             verification: { result, mockService in
                 var issues: [String] = []
@@ -234,7 +234,7 @@ public struct OrderFlowTestScenarios {
             expectedOrder: order,
             expectedResult: .failure,
             mockConfiguration: { mockService in
-                mockService.configureServerOrderMismatch()
+                await mockService.configureServerOrderMismatch()
             },
             verification: { result, mockService in
                 var issues: [String] = []
@@ -262,16 +262,16 @@ public struct OrderFlowTestScenarios {
             expectedOrder: pendingOrder,
             expectedResult: .success,
             mockConfiguration: { mockService in
-                mockService.configureOrderStatusQuery(status: .completed)
+                await mockService.configureOrderStatusQuery(status: .completed)
             },
             verification: { result, mockService in
                 var issues: [String] = []
                 
-                if !mockService.wasCalled("queryOrderStatus") {
+                if !(await mockService.wasCalled("queryOrderStatus")) {
                     issues.append("Order status query was not called during recovery")
                 }
                 
-                let queriedOrderIDs = mockService.getAllQueriedOrderIDs()
+                let queriedOrderIDs = await mockService.getAllQueriedOrderIDs()
                 if !queriedOrderIDs.contains(pendingOrder.id) {
                     issues.append("Expected order ID was not queried during recovery")
                 }
@@ -296,14 +296,14 @@ public struct OrderFlowTestScenarios {
             expectedResult: .success,
             mockConfiguration: { mockService in
                 for (product, order) in zip(products, orders) {
-                    mockService.configureSuccessfulPurchase(for: product)
-                    mockService.configureOrderCreation(order: order)
+                    await mockService.configureSuccessfulPurchase(for: product)
+                    await mockService.configureOrderCreation(order: order)
                 }
             },
             verification: { result, mockService in
                 var issues: [String] = []
                 
-                let createdOrders = mockService.getAllCreatedOrders()
+                let createdOrders = await mockService.getAllCreatedOrders()
                 if createdOrders.count < products.count {
                     issues.append("Not all orders were created during concurrent processing")
                 }
@@ -345,9 +345,9 @@ public struct OrderFlowScenario {
     /// 期望的结果类型
     public let expectedResult: ExpectedResultType
     /// Mock 配置闭包
-    public let mockConfiguration: (MockPurchaseService) -> Void
+    public let mockConfiguration: (MockPurchaseService) async -> Void
     /// 验证闭包
-    public let verification: (OrderFlowResult?, MockPurchaseService) -> OrderVerificationResult
+    public let verification: (OrderFlowResult?, MockPurchaseService) async -> OrderVerificationResult
     
     public init(
         name: String,
@@ -355,8 +355,8 @@ public struct OrderFlowScenario {
         product: IAPProduct,
         expectedOrder: IAPOrder?,
         expectedResult: ExpectedResultType,
-        mockConfiguration: @escaping (MockPurchaseService) -> Void,
-        verification: @escaping (OrderFlowResult?, MockPurchaseService) -> OrderVerificationResult
+        mockConfiguration: @escaping (MockPurchaseService) async -> Void,
+        verification: @escaping (OrderFlowResult?, MockPurchaseService) async -> OrderVerificationResult
     ) {
         self.name = name
         self.description = description
@@ -372,10 +372,10 @@ public struct OrderFlowScenario {
     /// - Returns: 测试结果
     public func execute(with mockService: MockPurchaseService) async -> OrderFlowTestResult {
         // 重置 Mock 服务
-        mockService.reset()
+        await mockService.reset()
         
         // 配置 Mock 服务
-        mockConfiguration(mockService)
+        await mockConfiguration(mockService)
         
         var orderFlowResult: OrderFlowResult?
         var executionError: Error?
@@ -393,7 +393,7 @@ public struct OrderFlowScenario {
         }
         
         // 执行验证
-        let verificationResult = verification(orderFlowResult, mockService)
+        let verificationResult = await verification(orderFlowResult, mockService)
         
         // 验证期望结果类型
         var resultTypeIssues: [String] = []

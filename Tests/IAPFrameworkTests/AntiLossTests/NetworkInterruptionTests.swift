@@ -82,13 +82,27 @@ func testNetworkRecoveryAutoRetry() async throws {
     let productService = ProductService(adapter: mockAdapter)
     let retryManager = RetryManager()
     
-    var attemptCount = 0
+    // 使用actor来安全地管理计数器
+    actor AttemptCounter {
+        private var count = 0
+        
+        func increment() -> Int {
+            count += 1
+            return count
+        }
+        
+        func getValue() -> Int {
+            return count
+        }
+    }
+    
+    let attemptCounter = AttemptCounter()
     
     // When - 使用重试机制处理网络中断
     let result = try await retryManager.executeWithRetry(operationId: "network_recovery_test") {
-        attemptCount += 1
+        let currentAttempt = await attemptCounter.increment()
         
-        if attemptCount <= 2 {
+        if currentAttempt <= 2 {
             // 前两次模拟网络错误
             throw IAPError.networkError
         } else {
@@ -102,7 +116,8 @@ func testNetworkRecoveryAutoRetry() async throws {
     
     // Then
     #expect(result.count == 1)
-    #expect(attemptCount == 3)
+    let finalAttemptCount = await attemptCounter.getValue()
+    #expect(finalAttemptCount == 3)
 }
 
 @Test("NetworkInterruption - 间歇性网络问题")
@@ -113,13 +128,27 @@ func testIntermittentNetworkIssues() async throws {
     let productService = ProductService(adapter: mockAdapter)
     let retryManager = RetryManager()
     
-    var attemptCount = 0
+    // 使用actor来安全地管理计数器
+    actor AttemptCounter {
+        private var count = 0
+        
+        func increment() -> Int {
+            count += 1
+            return count
+        }
+        
+        func getValue() -> Int {
+            return count
+        }
+    }
+    
+    let attemptCounter = AttemptCounter()
     let networkFailurePattern = [true, false, true, false, false] // 间歇性失败模式
     
     // When
     let result = try await retryManager.executeWithRetry(operationId: "intermittent_network_test") {
-        let shouldFail = attemptCount < networkFailurePattern.count ? networkFailurePattern[attemptCount] : false
-        attemptCount += 1
+        let currentAttempt = await attemptCounter.increment()
+        let shouldFail = (currentAttempt - 1) < networkFailurePattern.count ? networkFailurePattern[currentAttempt - 1] : false
         
         if shouldFail {
             throw IAPError.networkError
@@ -133,7 +162,8 @@ func testIntermittentNetworkIssues() async throws {
     
     // Then
     #expect(result.count == 1)
-    #expect(attemptCount == 2) // 第一次失败，第二次成功
+    let finalAttemptCount = await attemptCounter.getValue()
+    #expect(finalAttemptCount == 2) // 第一次失败，第二次成功
 }
 
 @Test("NetworkInterruption - 长时间网络中断")
@@ -149,18 +179,33 @@ func testLongTermNetworkOutage() async throws {
     )
     let retryManager = RetryManager(configuration: config)
     
-    var attemptCount = 0
+    // 使用actor来安全地管理计数器
+    actor AttemptCounter {
+        private var count = 0
+        
+        func increment() -> Int {
+            count += 1
+            return count
+        }
+        
+        func getValue() -> Int {
+            return count
+        }
+    }
+    
+    let attemptCounter = AttemptCounter()
     
     // When & Then - 长时间网络中断应该最终失败
     do {
         _ = try await retryManager.executeWithRetry(operationId: "long_outage_test") {
-            attemptCount += 1
+            _ = await attemptCounter.increment()
             throw IAPError.networkError // 持续网络错误
         }
         #expect(Bool(false), "Should have failed after max retries")
     } catch let error as IAPError {
         #expect(error == .networkError)
-        #expect(attemptCount == 6) // 初始尝试 + 5次重试
+        let finalAttemptCount = await attemptCounter.getValue()
+        #expect(finalAttemptCount == 6) // 初始尝试 + 5次重试
     }
 }
 
@@ -193,14 +238,28 @@ func testServerErrorRecovery() async throws {
     let retryManager = RetryManager()
     let testReceiptData = TestDataGenerator.generateReceiptData()
     
-    var attemptCount = 0
+    // 使用actor来安全地管理计数器
+    actor AttemptCounter {
+        private var count = 0
+        
+        func increment() -> Int {
+            count += 1
+            return count
+        }
+        
+        func getValue() -> Int {
+            return count
+        }
+    }
+    
+    let attemptCounter = AttemptCounter()
     let serverErrorCodes = [500, 502, 503] // 不同的服务器错误
     
     // When
     let result = try await retryManager.executeWithRetry(operationId: "server_error_recovery") {
-        if attemptCount < serverErrorCodes.count {
-            let errorCode = serverErrorCodes[attemptCount]
-            attemptCount += 1
+        let currentAttempt = await attemptCounter.increment()
+        if (currentAttempt - 1) < serverErrorCodes.count {
+            let errorCode = serverErrorCodes[currentAttempt - 1]
             throw IAPError.serverValidationFailed(statusCode: errorCode)
         } else {
             // 最终成功
@@ -212,7 +271,8 @@ func testServerErrorRecovery() async throws {
     
     // Then
     #expect(result.isValid)
-    #expect(attemptCount == serverErrorCodes.count)
+    let finalAttemptCount = await attemptCounter.getValue()
+    #expect(finalAttemptCount == serverErrorCodes.count + 1)
 }
 
 @Test("NetworkInterruption - 并发网络中断处理")
@@ -299,7 +359,13 @@ func testNetworkStatusMonitoring() async throws {
 func testBatchRetryAfterNetworkRecovery() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let recoveryManager = TransactionRecoveryManager(adapter: mockAdapter)
+    let mockOrderService = MockOrderService.alwaysSucceeds()
+    let mockCache = IAPCache(productCacheExpiration: 300)
+    let recoveryManager = TransactionRecoveryManager(
+        adapter: mockAdapter,
+        orderService: mockOrderService,
+        cache: mockCache
+    )
     
     // 创建因网络问题失败的交易
     let networkFailedTransactions = (0..<10).map { index in

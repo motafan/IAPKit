@@ -20,6 +20,14 @@ struct OrderAntiLossMechanismTests {
         // Create mock services
         mockOrderService = MockOrderService()
         mockTransactionMonitor = MockTransactionMonitor()
+        
+        // Create mock cache (not used but kept for potential future use)
+        _ = IAPCache(productCacheExpiration: 3600)
+        
+        // Create mock adapter (not used but kept for potential future use)
+        _ = MockStoreKitAdapter()
+        
+        // Create TransactionRecoveryManager mock
         mockTransactionRecoveryManager = MockTransactionRecoveryManager()
         
         // Create test products
@@ -59,8 +67,8 @@ struct OrderAntiLossMechanismTests {
         }
         
         // Verify recovery methods were called
-        let recoveryManagerCalled = await mockTransactionRecoveryManager.wasCalled("recoverPendingOrders")
-        let orderServiceCalled = await mockOrderService.wasCalled("recoverPendingOrders")
+        let recoveryManagerCalled = mockTransactionRecoveryManager.wasCalled("recoverPendingOrders")
+        let orderServiceCalled = mockOrderService.wasCalled("recoverPendingOrders")
         #expect(recoveryManagerCalled)
         #expect(orderServiceCalled)
     }
@@ -89,12 +97,12 @@ struct OrderAntiLossMechanismTests {
         #expect(recoveredOrders.count == pendingOrders.count)
         
         // Verify expired orders were cleaned up
-        let cleanupCalled = await mockOrderService.wasCalled("cleanupExpiredOrders")
+        let cleanupCalled = mockOrderService.wasCalled("cleanupExpiredOrders")
         #expect(cleanupCalled)
         
         // Verify expired orders are no longer in active state
         for expiredOrder in expiredOrders {
-            let order = await mockOrderService.getOrder(expiredOrder.id)
+            let order = mockOrderService.getOrder(expiredOrder.id)
             #expect(order?.isTerminal ?? true, "Expired order \(expiredOrder.id) should be terminal")
         }
     }
@@ -109,8 +117,8 @@ struct OrderAntiLossMechanismTests {
         ]
         
         // Configure network failure initially, then success on retry
-        await mockOrderService.configurePendingOrdersRecovery(pendingOrders: pendingOrders)
-        await mockOrderService.configureNetworkError(delay: 0.1)
+        mockOrderService.configurePendingOrdersRecovery(pendingOrders: pendingOrders)
+        mockOrderService.configureNetworkError(delay: 0.1)
         
         // When - Attempt recovery (should retry on network failure)
         var recoveredOrders: [IAPOrder] = []
@@ -125,7 +133,7 @@ struct OrderAntiLossMechanismTests {
                 attemptCount += 1
                 if attemptCount < maxAttempts {
                     // Configure success for next attempt
-                    await mockOrderService.setMockError(nil, shouldThrow: false)
+                    mockOrderService.setMockError(nil, shouldThrow: false)
                     try await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
                 } else {
                     throw error
@@ -198,7 +206,7 @@ struct OrderAntiLossMechanismTests {
         
         // Verify orders were created for orphaned transactions
         for transaction in orphanedTransactions {
-            let createdOrder = await mockOrderService.getAllOrders().first { $0.productID == transaction.productID }
+            let createdOrder = mockOrderService.getAllOrders().first { $0.productID == transaction.productID }
             #expect(createdOrder != nil, "Order should be created for orphaned transaction \(transaction.id)")
             
             if let order = createdOrder {
@@ -235,13 +243,13 @@ struct OrderAntiLossMechanismTests {
         
         // Then - Verify failed orders were cleaned up appropriately
         for order in failedPurchaseOrders {
-            let updatedOrder = await mockOrderService.getOrder(order.id)
+            let updatedOrder = mockOrderService.getOrder(order.id)
             #expect(updatedOrder?.status == .failed || updatedOrder?.status == .cancelled,
                    "Failed purchase order \(order.id) should be marked as failed or cancelled")
         }
         
         // Verify cleanup was called
-        let cleanupFailedCalled = await mockTransactionRecoveryManager.wasCalled("cleanupFailedPurchases")
+        let cleanupFailedCalled = mockTransactionRecoveryManager.wasCalled("cleanupFailedPurchases")
         #expect(cleanupFailedCalled)
     }
     
@@ -266,13 +274,13 @@ struct OrderAntiLossMechanismTests {
         
         // Then - Verify cleanupable orders were processed
         for order in cleanupableOrders {
-            let updatedOrder = await mockOrderService.getOrder(order.id)
+            let updatedOrder = mockOrderService.getOrder(order.id)
             #expect(updatedOrder?.isTerminal ?? true, "Cleanupable order \(order.id) should be terminal")
         }
         
         // Verify problematic orders were handled gracefully
         for order in problematicOrders {
-            let updatedOrder = await mockOrderService.getOrder(order.id)
+            let updatedOrder = mockOrderService.getOrder(order.id)
             #expect(updatedOrder != nil, "Problematic order \(order.id) should still exist")
         }
     }
@@ -315,13 +323,13 @@ struct OrderAntiLossMechanismTests {
         
         // Near expiry orders should be handled appropriately
         for nearExpiryOrder in nearExpiryOrders {
-            let order = await mockOrderService.getOrder(nearExpiryOrder.id)
+            let order = mockOrderService.getOrder(nearExpiryOrder.id)
             #expect(order != nil, "Near expiry order should still exist")
         }
         
         // Expired orders should be cleaned up
         for expiredOrder in expiredOrders {
-            let order = await mockOrderService.getOrder(expiredOrder.id)
+            let order = mockOrderService.getOrder(expiredOrder.id)
             #expect(order?.isTerminal ?? true, "Expired order should be terminal")
         }
     }
@@ -359,14 +367,14 @@ struct OrderAntiLossMechanismTests {
         
         // Then - Verify expired orders were handled
         for order in monitoredOrders {
-            let updatedOrder = await mockOrderService.getOrder(order.id)
+            let updatedOrder = mockOrderService.getOrder(order.id)
             #expect(updatedOrder?.isExpired ?? true, "Monitored order \(String(describing: order.id)) should be expired")
             #expect(updatedOrder?.isTerminal ?? true, "Expired order should be terminal")
         }
         
         // Verify monitoring was active
-        let monitoringStarted = await mockTransactionMonitor.wasCalled("startMonitoring")
-        let expiredOrdersCleanedUp = await mockOrderService.wasCalled("cleanupExpiredOrders")
+        let monitoringStarted = mockTransactionMonitor.wasCalled("startMonitoring")
+        let expiredOrdersCleanedUp = mockOrderService.wasCalled("cleanupExpiredOrders")
         #expect(monitoringStarted)
         #expect(expiredOrdersCleanedUp)
     }
@@ -392,7 +400,7 @@ struct OrderAntiLossMechanismTests {
         #expect(recoveryResult.failedPurchasesCleaned >= 0, "Should clean failed purchases")
         
         // Verify no data loss
-        let finalOrderCount = await mockOrderService.getAllOrders().count
+        let finalOrderCount = mockOrderService.getAllOrders().count
         let finalTransactionCount = await mockTransactionMonitor.getAllTransactions().count
         
         #expect(finalOrderCount > 0, "Should maintain order data")
@@ -406,19 +414,19 @@ struct OrderAntiLossMechanismTests {
     // MARK: - Helper Methods and Configuration
     
     private func configurePendingOrderRecoveryScenario(pendingOrders: [IAPOrder]) async {
-        await mockOrderService.configurePendingOrdersRecovery(pendingOrders: pendingOrders)
+        mockOrderService.configurePendingOrdersRecovery(pendingOrders: pendingOrders)
         await mockTransactionRecoveryManager.configurePendingOrderRecovery(orders: pendingOrders)
     }
     
     private func configureMixedOrderRecoveryScenario(pendingOrders: [IAPOrder], expiredOrders: [IAPOrder]) async {
-        await mockOrderService.configurePendingOrdersRecovery(pendingOrders: pendingOrders)
-        await mockOrderService.configureExpiredOrdersCleanup(expiredOrders: expiredOrders)
+        mockOrderService.configurePendingOrdersRecovery(pendingOrders: pendingOrders)
+        mockOrderService.configureExpiredOrdersCleanup(expiredOrders: expiredOrders)
         await mockTransactionRecoveryManager.configureMixedRecovery(pending: pendingOrders, expired: expiredOrders)
     }
     
     private func configureOrderTransactionAssociationScenario(pairs: [(order: IAPOrder, transaction: IAPTransaction)]) async {
         for (order, transaction) in pairs {
-            await mockOrderService.addMockOrder(order)
+            mockOrderService.addMockOrder(order)
             await mockTransactionMonitor.addMockTransaction(transaction)
         }
         await mockTransactionRecoveryManager.configureAssociationRecovery(pairs: pairs)
@@ -433,7 +441,7 @@ struct OrderAntiLossMechanismTests {
     
     private func configureFailedPurchaseCleanupScenario(orders: [IAPOrder], transactions: [IAPTransaction]) async {
         for order in orders {
-            await mockOrderService.addMockOrder(order)
+            mockOrderService.addMockOrder(order)
         }
         for transaction in transactions {
             await mockTransactionMonitor.addMockTransaction(transaction)
@@ -443,7 +451,7 @@ struct OrderAntiLossMechanismTests {
     
     private func configurePartialCleanupScenario(cleanupableOrders: [IAPOrder], problematicOrders: [IAPOrder]) async {
         for order in cleanupableOrders + problematicOrders {
-            await mockOrderService.addMockOrder(order)
+            mockOrderService.addMockOrder(order)
         }
         await mockTransactionRecoveryManager.configurePartialCleanup(
             cleanupable: cleanupableOrders,
@@ -453,9 +461,9 @@ struct OrderAntiLossMechanismTests {
     
     private func configureExpirationHandlingScenario(activeOrders: [IAPOrder], nearExpiryOrders: [IAPOrder], expiredOrders: [IAPOrder]) async {
         for order in activeOrders + nearExpiryOrders + expiredOrders {
-            await mockOrderService.addMockOrder(order)
+            mockOrderService.addMockOrder(order)
         }
-        await mockOrderService.setAutoExpireOrders(true)
+        mockOrderService.setAutoExpireOrders(true)
         await mockTransactionRecoveryManager.configureExpirationHandling(
             active: activeOrders,
             nearExpiry: nearExpiryOrders,
@@ -465,10 +473,10 @@ struct OrderAntiLossMechanismTests {
     
     private func configureExpirationMonitoringScenario(orders: [IAPOrder]) async {
         for order in orders {
-            await mockOrderService.addMockOrder(order)
+            mockOrderService.addMockOrder(order)
         }
         await mockTransactionMonitor.configureExpirationMonitoring(orders: orders)
-        await mockOrderService.setAutoExpireOrders(true)
+        mockOrderService.setAutoExpireOrders(true)
     }
     
     private func configureComplexAntiLossScenario(_ scenario: ComplexAntiLossTestScenario) async {
@@ -480,7 +488,7 @@ struct OrderAntiLossMechanismTests {
     }
     
     private func configureExpiredOrdersCleanup(expiredOrders: [IAPOrder]) async {
-        await mockOrderService.configureExpiredOrdersCleanup(expiredOrders: expiredOrders)
+        mockOrderService.configureExpiredOrdersCleanup(expiredOrders: expiredOrders)
     }
     
     private func createComplexAntiLossTestScenario() -> ComplexAntiLossTestScenario {
@@ -519,7 +527,7 @@ struct OrderAntiLossMechanismTests {
     }
     
     private func verifySystemConsistency() async -> SystemConsistencyResult {
-        let orders = await mockOrderService.getAllOrders()
+        let orders = mockOrderService.getAllOrders()
         let transactions = await mockTransactionMonitor.getAllTransactions()
         
         // Verify basic consistency rules
@@ -592,15 +600,7 @@ extension MockTransactionRecoveryManager {
         // Configure mock for expiration handling
     }
     
-    func recoverOrderTransactionAssociations() async throws -> [(order: IAPOrder, transaction: IAPTransaction)] {
-        // Mock implementation
-        return []
-    }
-    
-    func recoverOrphanedTransactions() async throws -> [IAPTransaction] {
-        // Mock implementation
-        return []
-    }
+
 }
 
 

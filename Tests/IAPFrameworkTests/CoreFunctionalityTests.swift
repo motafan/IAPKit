@@ -138,11 +138,14 @@ func testPurchaseResultEquality() {
     let transaction1 = IAPTransaction.successful(id: "tx1", productID: "test.product")
     let transaction2 = IAPTransaction.successful(id: "tx2", productID: "test.product")
     
-    let result1 = IAPPurchaseResult.success(transaction1)
-    let result2 = IAPPurchaseResult.success(transaction1) // 相同交易
-    let result3 = IAPPurchaseResult.success(transaction2) // 不同交易
-    let result4 = IAPPurchaseResult.cancelled
-    let result5 = IAPPurchaseResult.cancelled
+    let order1 = TestDataGenerator.generateOrder()
+    let order2 = TestDataGenerator.generateOrder()
+    
+    let result1 = IAPPurchaseResult.success(transaction1, order1)
+    let result2 = IAPPurchaseResult.success(transaction1, order1) // 相同交易
+    let result3 = IAPPurchaseResult.success(transaction2, order2) // 不同交易
+    let result4 = IAPPurchaseResult.cancelled(nil)
+    let result5 = IAPPurchaseResult.cancelled(nil)
     
     #expect(result1 == result2)
     #expect(result1 != result3)
@@ -181,7 +184,7 @@ func testReceiptValidationResult() {
 }
 
 @Test("商品类型分类")
-func testProductTypeClassification() {
+func testProductTypeClassificationCore() {
     // 测试消耗型商品
     let consumableProduct = IAPProduct.mock(
         id: "consumable.coins",
@@ -236,7 +239,7 @@ func testConfigurationDefaultValues() {
 
 @Test("自定义配置创建")
 func testCustomConfigurationCreation() {
-    let customReceiptConfig = IAPConfiguration.ReceiptValidationConfig(
+    let customReceiptConfig = ReceiptValidationConfiguration(
         mode: .remote,
         timeout: 60
     )
@@ -244,8 +247,8 @@ func testCustomConfigurationCreation() {
     let customConfig = IAPConfiguration(
         enableDebugLogging: true,
         autoFinishTransactions: false,
-        autoRecoverTransactions: false,
         productCacheExpiration: 600,
+        autoRecoverTransactions: false,
         receiptValidation: customReceiptConfig
     )
     
@@ -276,7 +279,7 @@ func testPriceHandling() {
 }
 
 @Test("交易数量处理")
-func testTransactionQuantityHandling() {
+func testTransactionQuantityHandlingCore() {
     // 测试默认数量
     let defaultTransaction = IAPTransaction.successful(id: "tx1", productID: "product1")
     #expect(defaultTransaction.quantity == 1)
@@ -293,7 +296,7 @@ func testTransactionQuantityHandling() {
 }
 
 @Test("收据环境处理")
-func testReceiptEnvironmentHandling() {
+func testReceiptEnvironmentHandlingCore() {
     // 测试沙盒环境
     let sandboxResult = IAPReceiptValidationResult(
         isValid: true,
@@ -317,21 +320,21 @@ func testReceiptEnvironmentHandling() {
 @MainActor
 func testProtocolConformance() {
     // 测试IAPManager符合IAPManagerProtocol
-    let manager: IAPManagerProtocol = IAPManager.shared
+    let _: IAPManagerProtocol = IAPManager.shared
     // 如果能到这里，说明协议一致性正常
-    #expect(true)
+    #expect(Bool(true))
 }
 
 @Test("Sendable协议一致性")
 func testSendableConformance() {
     // 测试关键类型符合Sendable
-    let product: any Sendable = IAPProduct.mock(id: "test", displayName: "测试")
-    let transaction: any Sendable = IAPTransaction.successful(id: "tx1", productID: "test")
-    let error: any Sendable = IAPError.productNotFound
-    let result: any Sendable = IAPPurchaseResult.cancelled
+    let _: any Sendable = IAPProduct.mock(id: "test", displayName: "测试")
+    let _: any Sendable = IAPTransaction.successful(id: "tx1", productID: "test")
+    let _: any Sendable = IAPError.productNotFound
+    let _: any Sendable = IAPPurchaseResult.cancelled(nil)
     
     // 如果编译通过，说明Sendable一致性正常
-    #expect(true)
+    #expect(Bool(true))
 }
 
 @Test("管理器单例访问")
@@ -398,7 +401,7 @@ func testManagerConvenienceMethods() {
 }
 
 @Test("商品ID验证")
-func testProductIDValidation() {
+func testProductIDValidationCore() {
     // 测试有效商品ID
     let validIDs = [
         "com.app.product1",
@@ -419,7 +422,7 @@ func testProductIDValidation() {
 }
 
 @Test("综合错误处理")
-func testComprehensiveErrorHandling() {
+func testComprehensiveErrorHandlingCore() {
     let errors: [IAPError] = [
         .productNotFound,
         .purchaseCancelled,
@@ -447,7 +450,7 @@ func testComprehensiveErrorHandling() {
 }
 
 @Test("网络错误处理")
-func testNetworkErrorHandling() {
+func testNetworkErrorHandlingCore() {
     let networkErrors: [IAPError] = [
         .networkError,
         .timeout,

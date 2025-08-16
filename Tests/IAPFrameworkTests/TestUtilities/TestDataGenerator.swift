@@ -488,10 +488,23 @@ public struct TestDataGenerator {
         validItems: Int = 8,
         expiredItems: Int = 2
     ) -> CacheStats {
-        return CacheStats(
+        let productStats = ProductCacheStats(
             totalItems: totalItems,
             validItems: validItems,
             expiredItems: expiredItems
+        )
+        
+        let orderStats = OrderCacheStats(
+            totalOrders: totalItems / 2,
+            pendingOrders: 2,
+            completedOrders: validItems / 2,
+            failedOrders: 1,
+            expiredOrders: expiredItems
+        )
+        
+        return CacheStats(
+            productStats: productStats,
+            orderStats: orderStats
         )
     }
     

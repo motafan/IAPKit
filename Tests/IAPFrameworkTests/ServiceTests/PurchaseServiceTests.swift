@@ -10,13 +10,13 @@ func testPurchaseServiceBasicPurchase() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     
     let testProduct = TestDataGenerator.generateProduct(id: "test.product")
-    let testOrder = TestDataGenerator.generateOrder(for: testProduct)
+    let testOrder = TestDataGenerator.generateOrder(productID: testProduct.id)
     let successTransaction = TestDataGenerator.generateSuccessfulTransaction(productID: testProduct.id)
     mockAdapter.setMockPurchaseResult(.success(successTransaction, testOrder))
     
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -28,8 +28,8 @@ func testPurchaseServiceBasicPurchase() async throws {
     
     // Then
     let verification = TestStateVerifier.verifyPurchaseResult(result, expectedType: .success)
-    #expect(verification.isValid, verification.summary)
-    #expect(mockAdapter.wasCalled("purchase"))
+    #expect(verification.isValid, Comment(rawValue: verification.summary))
+    #expect(await mockAdapter.wasCalled("purchase"))
 }
 
 @MainActor
@@ -38,10 +38,10 @@ func testPurchaseServiceCancelledPurchase() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     mockAdapter.setMockPurchaseResult(.cancelled(nil))
     
     let testProduct = TestDataGenerator.generateProduct()
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -53,7 +53,7 @@ func testPurchaseServiceCancelledPurchase() async throws {
     
     // Then
     let verification = TestStateVerifier.verifyPurchaseResult(result, expectedType: .cancelled)
-    #expect(verification.isValid, verification.summary)
+    #expect(verification.isValid, Comment(rawValue: verification.summary))
 }
 
 @MainActor
@@ -62,10 +62,10 @@ func testPurchaseServiceFailedPurchase() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     mockAdapter.setMockError(.purchaseFailed(underlying: "Test error"), shouldThrow: true)
     
     let testProduct = TestDataGenerator.generateProduct()
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -87,10 +87,10 @@ func testPurchaseServiceDuplicatePurchaseDetection() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     mockAdapter.setMockDelay(0.5) // 500ms delay to simulate ongoing purchase
     
     let testProduct = TestDataGenerator.generateProduct()
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -120,6 +120,7 @@ func testPurchaseServiceRestorePurchases() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     
     let restoredTransactions = TestDataGenerator.generateTransactions(
         count: 3,
@@ -127,7 +128,6 @@ func testPurchaseServiceRestorePurchases() async throws {
     )
     mockAdapter.setMockRestoreResult(restoredTransactions)
     
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -142,8 +142,8 @@ func testPurchaseServiceRestorePurchases() async throws {
         result,
         expectedCount: 3
     )
-    #expect(verification.isValid, verification.summary)
-    #expect(mockAdapter.wasCalled("restorePurchases"))
+    #expect(verification.isValid, Comment(rawValue: verification.summary))
+    #expect(await mockAdapter.wasCalled("restorePurchases"))
 }
 
 @MainActor
@@ -152,9 +152,9 @@ func testPurchaseServiceEmptyRestoreResult() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     mockAdapter.setMockRestoreResult([])
     
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -166,7 +166,7 @@ func testPurchaseServiceEmptyRestoreResult() async throws {
     
     // Then
     #expect(result.isEmpty)
-    #expect(mockAdapter.wasCalled("restorePurchases"))
+    #expect(await mockAdapter.wasCalled("restorePurchases"))
 }
 
 @MainActor
@@ -175,9 +175,9 @@ func testPurchaseServiceFinishTransaction() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     
     let testTransaction = TestDataGenerator.generateSuccessfulTransaction()
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -188,7 +188,7 @@ func testPurchaseServiceFinishTransaction() async throws {
     try await purchaseService.finishTransaction(testTransaction)
     
     // Then
-    #expect(mockAdapter.wasCalled("finishTransaction"))
+    #expect(await mockAdapter.wasCalled("finishTransaction"))
     let callCount = mockAdapter.getCallCount(for: "finishTransaction")
     #expect(callCount == 1)
 }
@@ -199,12 +199,12 @@ func testPurchaseServiceReceiptValidation() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     
     let testReceiptData = TestDataGenerator.generateReceiptData()
     let expectedResult = TestDataGenerator.generateReceiptValidationResult(isValid: true)
-    await mockValidator.setMockValidationResult(expectedResult)
+    mockValidator.setMockValidationResult(expectedResult)
     
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -219,8 +219,8 @@ func testPurchaseServiceReceiptValidation() async throws {
         result,
         expectedValidity: true
     )
-    #expect(verification.isValid, verification.summary)
-    #expect(mockValidator.wasCalled("validateReceipt"))
+    #expect(verification.isValid, Comment(rawValue: verification.summary))
+    #expect(await mockValidator.wasCalled("validateReceipt"))
 }
 
 @MainActor
@@ -229,9 +229,9 @@ func testPurchaseServiceReceiptValidationFailure() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysInvalid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     
     let testReceiptData = TestDataGenerator.generateReceiptData()
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -252,8 +252,8 @@ func testPurchaseServiceActivePurchaseManagement() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
-    
     let mockOrderService = MockOrderService.alwaysSucceeds()
+    
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -286,8 +286,8 @@ func testPurchaseServicePurchaseStats() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
-    
     let mockOrderService = MockOrderService.alwaysSucceeds()
+    
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -309,9 +309,9 @@ func testPurchaseServicePurchaseValidation() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     
     let testProduct = TestDataGenerator.generateProduct()
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -333,6 +333,7 @@ func testPurchaseServiceInvalidProductValidation() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     
     // 创建无效商品（空ID）
     let invalidProduct = IAPProduct(
@@ -345,7 +346,6 @@ func testPurchaseServiceInvalidProductValidation() async throws {
         productType: .consumable
     )
     
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -366,10 +366,10 @@ func testPurchaseServiceNetworkErrorHandling() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     mockAdapter.setMockError(.networkError, shouldThrow: true)
     
     let testProduct = TestDataGenerator.generateProduct()
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -391,17 +391,17 @@ func testPurchaseServiceWithConfiguration() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     
     let config = TestDataGenerator.generateConfiguration(
         autoFinishTransactions: false
     )
     
     let testProduct = TestDataGenerator.generateProduct(productType: .consumable)
-    let testOrder = TestDataGenerator.generateOrder(for: testProduct)
+    let testOrder = TestDataGenerator.generateOrder(productID: testProduct.id)
     let successTransaction = TestDataGenerator.generateSuccessfulTransaction(productID: testProduct.id)
     mockAdapter.setMockPurchaseResult(.success(successTransaction, testOrder))
     
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
@@ -428,14 +428,14 @@ func testPurchaseServiceWithDelay() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
+    let mockOrderService = MockOrderService.alwaysSucceeds()
     mockAdapter.setMockDelay(0.1) // 100ms delay
     
     let testProduct = TestDataGenerator.generateProduct()
-    let testOrder = TestDataGenerator.generateOrder(for: testProduct)
+    let testOrder = TestDataGenerator.generateOrder(productID: testProduct.id)
     let successTransaction = TestDataGenerator.generateSuccessfulTransaction(productID: testProduct.id)
     mockAdapter.setMockPurchaseResult(.success(successTransaction, testOrder))
     
-    let mockOrderService = MockOrderService.alwaysSucceeds()
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,

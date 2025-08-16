@@ -153,7 +153,10 @@ public struct TestStateVerifier {
         var issues: [String] = []
         
         switch (result, expectedType) {
-        case (.success, .success), (.cancelled, .cancelled), (.userCancelled, .userCancelled), (.pending, .pending):
+        case (.success, .success), (.cancelled, .cancelled), (.pending, .pending):
+            break
+        case (.failed, .userCancelled):
+            // 将用户取消视为失败的一种情况
             break
         default:
             issues.append("Purchase result type mismatch: expected '\(expectedType)', got '\(result)'")

@@ -239,15 +239,39 @@ public struct LocalizationTester {
             // 检查是否包含格式化占位符
             if localizedString.contains("%@") || localizedString.contains("%d") {
                 // 验证格式化字符串是否有效
-                do {
-                    _ = try String(format: localizedString, "test")
-                } catch {
+                // Note: String(format:) doesn't throw, but can crash with invalid formats
+                // We'll do a basic validation instead
+                let formatSpecifiers = countFormatSpecifiers(in: localizedString)
+                let providedArgs = 1 // We're testing with one "test" argument
+                
+                if formatSpecifiers > providedArgs {
                     invalidKeys.append(key)
                 }
             }
         }
         
         return invalidKeys
+    }
+    
+    /**
+     计算字符串中的格式化占位符数量
+     
+     - Parameter string: 要检查的字符串
+     - Returns: 格式化占位符的数量
+     */
+    private func countFormatSpecifiers(in string: String) -> Int {
+        do {
+            let regex = try NSRegularExpression(pattern: "%[@difs]", options: [])
+            let range = NSRange(location: 0, length: string.utf16.count)
+            return regex.numberOfMatches(in: string, options: [], range: range)
+        } catch {
+            // 如果正则表达式失败，回退到简单计数
+            return string.components(separatedBy: "%@").count - 1 +
+                   string.components(separatedBy: "%d").count - 1 +
+                   string.components(separatedBy: "%i").count - 1 +
+                   string.components(separatedBy: "%f").count - 1 +
+                   string.components(separatedBy: "%s").count - 1
+        }
     }
     
     /**

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import IAPFramework
 
@@ -110,12 +111,14 @@ func testIAPErrorPropertiesAndBehavior() {
 func testIAPPurchaseResultEquality() {
     let transaction1 = IAPTransaction.successful(id: "tx1", productID: "test.product")
     let transaction2 = IAPTransaction.successful(id: "tx2", productID: "test.product")
+    let order1 = TestDataGenerator.generateOrder()
+    let order2 = TestDataGenerator.generateOrder()
     
-    let result1 = IAPPurchaseResult.success(transaction1)
-    let result2 = IAPPurchaseResult.success(transaction1) // Same transaction
-    let result3 = IAPPurchaseResult.success(transaction2) // Different transaction
-    let result4 = IAPPurchaseResult.cancelled
-    let result5 = IAPPurchaseResult.cancelled
+    let result1 = IAPPurchaseResult.success(transaction1, order1)
+    let result2 = IAPPurchaseResult.success(transaction1, order1) // Same transaction and order
+    let result3 = IAPPurchaseResult.success(transaction2, order2) // Different transaction
+    let result4 = IAPPurchaseResult.cancelled(nil)
+    let result5 = IAPPurchaseResult.cancelled(nil)
     
     #expect(result1 == result2)
     #expect(result1 != result3)
@@ -322,7 +325,7 @@ func testIAPConfigurationDefaultValues() {
 
 @Test("IAPConfiguration Custom Values")
 func testIAPConfigurationCustomValues() {
-    let customReceiptConfig = IAPConfiguration.ReceiptValidationConfig(
+    let customReceiptConfig = ReceiptValidationConfiguration(
         mode: .remote,
         timeout: 60
     )
@@ -330,8 +333,8 @@ func testIAPConfigurationCustomValues() {
     let customConfig = IAPConfiguration(
         enableDebugLogging: true,
         autoFinishTransactions: false,
-        autoRecoverTransactions: false,
         productCacheExpiration: 600,
+        autoRecoverTransactions: false,
         receiptValidation: customReceiptConfig
     )
     
@@ -349,21 +352,21 @@ func testIAPConfigurationCustomValues() {
 @MainActor
 func testIAPManagerProtocolConformance() {
     // Test that IAPManager conforms to IAPManagerProtocol
-    let manager: IAPManagerProtocol = IAPManager.shared
+    let _: IAPManagerProtocol = IAPManager.shared
     // Just test that the assignment works - this proves conformance
-    #expect(true) // If we get here, conformance works
+    #expect(Bool(true)) // If we get here, conformance works
 }
 
 @Test("Sendable Protocol Conformance")
 func testSendableProtocolConformance() {
     // Test that key types conform to Sendable
-    let product: any Sendable = IAPProduct.mock(id: "test", displayName: "Test")
-    let transaction: any Sendable = IAPTransaction.successful(id: "tx1", productID: "test")
-    let error: any Sendable = IAPError.productNotFound
-    let result: any Sendable = IAPPurchaseResult.cancelled
+    let _: any Sendable = IAPProduct.mock(id: "test", displayName: "Test")
+    let _: any Sendable = IAPTransaction.successful(id: "tx1", productID: "test")
+    let _: any Sendable = IAPError.productNotFound
+    let _: any Sendable = IAPPurchaseResult.cancelled(nil)
     
     // If we get here without compiler errors, Sendable conformance works
-    #expect(true)
+    #expect(Bool(true))
 }
 
 // MARK: - Basic Manager Tests

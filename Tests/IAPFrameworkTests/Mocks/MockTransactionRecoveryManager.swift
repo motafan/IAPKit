@@ -85,6 +85,36 @@ public final class MockTransactionRecoveryManager: @unchecked Sendable {
         mockRecoveryStats.failedPurchasesCleanedUp += 1
     }
     
+    public func recoverOrderTransactionAssociations() async throws -> [(order: IAPOrder, transaction: IAPTransaction)] {
+        incrementCallCount(for: "recoverOrderTransactionAssociations")
+        
+        if mockDelay > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(mockDelay * 1_000_000_000))
+        }
+        
+        if shouldThrowError, let error = mockError {
+            throw error
+        }
+        
+        // Return empty array for now - can be configured in tests
+        return []
+    }
+    
+    public func recoverOrphanedTransactions() async throws -> [IAPTransaction] {
+        incrementCallCount(for: "recoverOrphanedTransactions")
+        
+        if mockDelay > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(mockDelay * 1_000_000_000))
+        }
+        
+        if shouldThrowError, let error = mockError {
+            throw error
+        }
+        
+        // Return empty array for now - can be configured in tests
+        return []
+    }
+    
     public func getRecoveryStats() -> RecoveryStats {
         incrementCallCount(for: "getRecoveryStats")
         return mockRecoveryStats
@@ -290,5 +320,31 @@ extension MockTransactionRecoveryManager {
         var stats = mockRecoveryStats
         stats.failedPurchasesCleanedUp = expired.count
         setMockRecoveryStats(stats)
+    }
+    
+    /// 配置关联恢复场景
+    /// - Parameter pairs: 订单-交易对
+    public func configureAssociationRecovery(pairs: [(order: IAPOrder, transaction: IAPTransaction)]) {
+        // Store pairs for later retrieval if needed
+        callParameters["associationPairs"] = pairs
+    }
+    
+    /// 配置孤立交易恢复场景
+    /// - Parameter transactions: 孤立交易
+    public func configureOrphanedTransactionRecovery(transactions: [IAPTransaction]) {
+        // Store transactions for later retrieval if needed
+        callParameters["orphanedTransactions"] = transactions
+    }
+    
+    /// 配置失败购买清理场景
+    /// - Parameters:
+    ///   - orders: 失败的订单
+    ///   - transactions: 失败的交易
+    public func configureFailedPurchaseCleanup(orders: [IAPOrder], transactions: [IAPTransaction]) {
+        var stats = mockRecoveryStats
+        stats.failedPurchasesCleanedUp = orders.count
+        setMockRecoveryStats(stats)
+        callParameters["failedOrders"] = orders
+        callParameters["failedTransactions"] = transactions
     }
 }

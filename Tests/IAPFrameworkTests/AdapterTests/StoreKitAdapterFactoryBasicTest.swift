@@ -3,12 +3,9 @@ import Foundation
 @testable import IAPFramework
 
 @Test("StoreKitAdapterFactory 基本功能测试")
-func testStoreKitAdapterFactoryBasic() async throws {
+func testStoreKitAdapterFactoryBasic() {
     // Given & When
     let adapter = StoreKitAdapterFactory.createAdapter()
-    
-    // Then
-    #expect(adapter is StoreKitAdapterProtocol)
     
     // 验证适配器类型正确
     if #available(iOS 15.0, macOS 12.0, *) {
@@ -19,7 +16,7 @@ func testStoreKitAdapterFactoryBasic() async throws {
 }
 
 @Test("StoreKitAdapterFactory 版本检测测试")
-func testStoreKitAdapterFactoryVersionDetectionBasic() async throws {
+func testStoreKitAdapterFactoryVersionDetectionBasic() {
     // Given & When
     let adapterType = StoreKitAdapterFactory.detectBestAdapterType()
     

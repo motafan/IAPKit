@@ -58,8 +58,8 @@ public final class SwiftUIIAPManager: ObservableObject {
     /// 取消令牌集合
     private var cancellables = Set<AnyCancellable>()
     
-    /// 状态更新定时器
-    private var statusUpdateTimer: Timer?
+    /// 状态监控任务
+    private var statusMonitoringTask: Task<Void, Never>?
     
     // MARK: - Initialization
     
@@ -69,9 +69,10 @@ public final class SwiftUIIAPManager: ObservableObject {
     }
     
     deinit {
-        // In Swift 6, we cannot use Task in deinit as it may outlive the object
-        // The cleanup will be handled by the app lifecycle or manual calls
-        stopStatusMonitoring()
+        // In Swift 6, we cannot use Task in deinit as it may outlive the object.
+        // The cleanup should be handled by the app lifecycle or manual calls to cleanup().
+        // Task cancellation is thread-safe and synchronous.
+        statusMonitoringTask?.cancel()
     }
     
     // MARK: - Public Methods
@@ -334,20 +335,26 @@ public final class SwiftUIIAPManager: ObservableObject {
     
     /// 开始状态监控
     private func startStatusMonitoring() {
-        statusUpdateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        statusMonitoringTask = Task { [weak self] in
+            while !Task.isCancelled {
                 await self?.updateStatus()
+                
+                // 等待1秒，如果任务被取消则立即退出
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    // Task被取消，退出循环
+                    break
+                }
             }
         }
     }
     
     /// 停止状态监控
     private nonisolated func stopStatusMonitoring() {
-        // Use MainActor.assumeIsolated since we know this is safe for timer cleanup
-        MainActor.assumeIsolated {
-            statusUpdateTimer?.invalidate()
-            statusUpdateTimer = nil
-        }
+        // Task cancellation is thread-safe
+        statusMonitoringTask?.cancel()
+        statusMonitoringTask = nil
     }
     
     /// 更新状态

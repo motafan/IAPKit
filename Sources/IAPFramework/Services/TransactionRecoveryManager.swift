@@ -25,8 +25,8 @@ public final class TransactionRecoveryManager {
     /// 恢复状态
     private var isRecovering = false
     
-    /// 恢复完成回调
-    private var recoveryCompletionHandlers: [(RecoveryResult) -> Void] = []
+    /// 当前恢复结果
+    private var currentRecoveryResult: RecoveryResult?
     
     /// 初始化交易恢复管理器
     /// - Parameters:
@@ -52,21 +52,18 @@ public final class TransactionRecoveryManager {
     // MARK: - Public Methods
     
     /// 开始交易和订单恢复
-    /// - Parameter completion: 恢复完成回调
-    public func startRecovery(completion: @escaping (RecoveryResult) -> Void = { _ in }) async {
+    /// - Returns: 恢复结果
+    public func startRecovery() async -> RecoveryResult {
         guard !isRecovering else {
             IAPLogger.debug("TransactionRecoveryManager: Recovery already in progress")
-            completion(.alreadyInProgress)
-            return
+            return .alreadyInProgress
         }
         
         IAPLogger.info("TransactionRecoveryManager: Starting transaction and order recovery")
         isRecovering = true
         recoveryStats.reset()
         recoveryStats.startTime = Date()
-        
-        // 添加完成回调
-        recoveryCompletionHandlers.append(completion)
+        currentRecoveryResult = nil
         
         // 更新状态
         stateManager?.setRecoveryInProgress(true)
@@ -87,8 +84,7 @@ public final class TransactionRecoveryManager {
         
         if pendingTransactions.isEmpty && pendingOrders.isEmpty {
             IAPLogger.debug("TransactionRecoveryManager: No pending transactions or orders found")
-            await completeRecovery(with: .success(recoveredCount: 0))
-            return
+            return await completeRecovery(with: .success(recoveredCount: 0))
         }
         
         IAPLogger.info("TransactionRecoveryManager: Found \(pendingTransactions.count) pending transactions and \(pendingOrders.count) pending orders")
@@ -102,7 +98,7 @@ public final class TransactionRecoveryManager {
         
         // 完成恢复
         let totalRecovered = recoveryStats.recoveredTransactions + recoveryStats.recoveredOrders
-        await completeRecovery(with: .success(recoveredCount: totalRecovered))
+        return await completeRecovery(with: .success(recoveredCount: totalRecovered))
     }
     
     /// 获取恢复统计信息
@@ -499,9 +495,11 @@ public final class TransactionRecoveryManager {
     
     /// 完成恢复过程
     /// - Parameter result: 恢复结果
-    private func completeRecovery(with result: RecoveryResult) async {
+    /// - Returns: 恢复结果
+    private func completeRecovery(with result: RecoveryResult) async -> RecoveryResult {
         recoveryStats.endTime = Date()
         isRecovering = false
+        currentRecoveryResult = result
         
         // 更新状态
         stateManager?.setRecoveryInProgress(false)
@@ -527,18 +525,14 @@ public final class TransactionRecoveryManager {
             break
         }
         
-        // 调用所有完成回调
-        for handler in recoveryCompletionHandlers {
-            handler(result)
-        }
-        recoveryCompletionHandlers.removeAll()
+        return result
     }
 }
 
 // MARK: - Supporting Types
 
 /// 恢复结果
-public enum RecoveryResult {
+public enum RecoveryResult: Sendable {
     case success(recoveredCount: Int)
     case failure(IAPError)
     case alreadyInProgress

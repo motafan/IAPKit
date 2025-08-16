@@ -356,10 +356,8 @@ func testTransactionRecoveryManagerComplexScenario() async throws {
     await mockAdapter.setMockPendingTransactions(complexTransactions)
     
     // When
-    var recoveryResults: [RecoveryResult] = []
-    await recoveryManager.startRecovery { result in
-        recoveryResults.append(result)
-    }
+    let recoveryResult = await recoveryManager.startRecovery()
+    let recoveryResults = [recoveryResult]
     
     // Then
     #expect(!recoveryResults.isEmpty)
@@ -423,7 +421,7 @@ func testTransactionRecoveryManagerPrioritySorting() async throws {
     await mockAdapter.setMockPendingTransactions(sortedTransactions)
     
     // When
-    await recoveryManager.startRecovery { _ in }
+    _ = await recoveryManager.startRecovery()
     
     // Then
     let stats = recoveryManager.getRecoveryStatistics()
@@ -461,7 +459,7 @@ func testTransactionRecoveryManagerBatchProcessing() async throws {
     
     // When
     let startTime = Date()
-    await recoveryManager.startRecovery { _ in }
+    _ = await recoveryManager.startRecovery()
     let processingTime = Date().timeIntervalSince(startTime)
     
     // Then
@@ -507,10 +505,8 @@ func testNetworkInterruptionComplexScenario() async throws {
     await mockAdapter.setMockPendingTransactions(interruptedTransactions)
     
     // When - 模拟网络恢复后的处理
-    var recoveryResults: [RecoveryResult] = []
-    await recoveryManager.startRecovery { result in
-        recoveryResults.append(result)
-    }
+    let recoveryResult = await recoveryManager.startRecovery()
+    let recoveryResults = [recoveryResult]
     
     // Then
     #expect(!recoveryResults.isEmpty)
@@ -639,7 +635,7 @@ func testRetryMechanismTransactionRecoveryIntegration() async throws {
         }
         
         // 模拟成功的恢复操作
-        await recoveryManager.startRecovery { _ in }
+        _ = await recoveryManager.startRecovery()
         return "recovery_success"
     }
     
@@ -678,7 +674,7 @@ func testAntiLossMechanismPerformance() async throws {
     
     // When
     let startTime = Date()
-    await recoveryManager.startRecovery { _ in }
+    _ = await recoveryManager.startRecovery()
     let processingTime = Date().timeIntervalSince(startTime)
     
     // Then
@@ -717,7 +713,7 @@ func testAntiLossMechanismMemoryUsage() async throws {
         }
         
         await mockAdapter.setMockPendingTransactions(batchTransactions)
-        await recoveryManager.startRecovery { _ in }
+        _ = await recoveryManager.startRecovery()
         
         // 清理以模拟内存管理
         await mockAdapter.setMockPendingTransactions([])
@@ -779,7 +775,7 @@ func testAntiLossMechanismEdgeCases() async throws {
     await mockAdapter.setMockPendingTransactions(edgeCaseTransactions)
     
     // When
-    await recoveryManager.startRecovery { _ in }
+    _ = await recoveryManager.startRecovery()
     
     // Then - 应该能够处理边缘情况而不崩溃
     let stats = recoveryManager.getRecoveryStatistics()

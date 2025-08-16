@@ -130,7 +130,7 @@ public func getCachedProducts() async -> [IAPProduct]
 public func finishTransaction(_ transaction: IAPTransaction) async throws
 
 /// Manually trigger transaction recovery
-public func recoverTransactions(completion: @escaping (RecoveryResult) -> Void = { _ in }) async
+public func recoverTransactions() async -> RecoveryResult
 
 /// Check if a product is being purchased
 public func isPurchasing(_ productID: String) -> Bool
@@ -680,8 +680,7 @@ public struct LocalizationTester {
 ## Type Aliases
 
 ```swift
-/// Completion handler for recovery operations
-public typealias RecoveryCompletion = (RecoveryResult) -> Void
+
 
 /// Transaction update handler
 public typealias TransactionUpdateHandler = (IAPTransaction) -> Void

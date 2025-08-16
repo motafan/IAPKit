@@ -189,8 +189,11 @@ class UIKitExampleStoreViewController: UIViewController {
         isLoading = true
         statusLabel.text = "正在初始化..."
         
-        iapManager.initialize { [weak self] in
-            self?.loadProducts()
+        Task {
+            await iapManager.initialize()
+            await MainActor.run {
+                self.loadProducts()
+            }
         }
     }
     
@@ -199,18 +202,20 @@ class UIKitExampleStoreViewController: UIViewController {
         isLoading = true
         statusLabel.text = "正在加载商品..."
         
-        iapManager.loadProducts(productIDs: productIDs) { [weak self] result in
-            DispatchQueue.main.async {
-                self?.isLoading = false
-                self?.refreshControl.endRefreshing()
-                
-                switch result {
-                case .success(let products):
-                    self?.products = products
-                    self?.updatePurchaseStates()
-                    
-                case .failure(let error):
-                    self?.showError(error)
+        Task {
+            do {
+                let products = try await iapManager.loadProducts(productIDs: productIDs)
+                await MainActor.run {
+                    self.isLoading = false
+                    self.refreshControl.endRefreshing()
+                    self.products = products
+                    self.updatePurchaseStates()
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.refreshControl.endRefreshing()
+                    self.showError(error as? IAPError ?? IAPError.unknownError("Unknown error occurred"))
                 }
             }
         }
@@ -324,18 +329,19 @@ class UIKitExampleStoreViewController: UIViewController {
     private func restorePurchases() {
         navigationItem.rightBarButtonItems?.first?.isEnabled = false
         
-        iapManager.restorePurchases { [weak self] result in
-            DispatchQueue.main.async {
-                self?.navigationItem.rightBarButtonItems?.first?.isEnabled = true
-                
-                switch result {
-                case .success(let transactions):
+        Task {
+            do {
+                let transactions = try await iapManager.restorePurchases()
+                await MainActor.run {
+                    self.navigationItem.rightBarButtonItems?.first?.isEnabled = true
                     let message = transactions.isEmpty ? "没有找到可恢复的购买" : "成功恢复 \(transactions.count) 个购买项目"
-                    self?.showSuccess(message)
-                    self?.updatePurchaseStates()
-                    
-                case .failure(let error):
-                    self?.showError(error)
+                    self.showSuccess(message)
+                    self.updatePurchaseStates()
+                }
+            } catch {
+                await MainActor.run {
+                    self.navigationItem.rightBarButtonItems?.first?.isEnabled = true
+                    self.showError(error as? IAPError ?? IAPError.unknownError("Unknown error occurred"))
                 }
             }
         }
@@ -407,17 +413,18 @@ class UIKitExampleStoreViewController: UIViewController {
     
     /// 直接购买商品
     private func purchaseProductDirectly(_ product: IAPProduct, userInfo: [String: Any]?) {
-        iapManager.purchase(product, userInfo: userInfo) { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let purchaseResult):
-                    self?.handlePurchaseResult(purchaseResult, for: product)
-                    
-                case .failure(let error):
-                    self?.showError(error)
+        Task {
+            do {
+                let purchaseResult = try await iapManager.purchase(product, userInfo: userInfo)
+                await MainActor.run {
+                    self.handlePurchaseResult(purchaseResult, for: product)
+                    self.updatePurchaseStates()
                 }
-                
-                self?.updatePurchaseStates()
+            } catch {
+                await MainActor.run {
+                    self.showError(error as? IAPError ?? IAPError.unknownError("Unknown error occurred"))
+                    self.updatePurchaseStates()
+                }
             }
         }
     }
@@ -429,9 +436,11 @@ class UIKitExampleStoreViewController: UIViewController {
             showSuccess("成功购买 \(product.displayName)\n订单ID: \(order.id)")
             
             // 自动完成交易
-            iapManager.finishTransaction(transaction) { _ in }
+            Task {
+                try? await iapManager.finishTransaction(transaction)
+            }
             
-        case .pending(let transaction, let order):
+        case .pending(_, let order):
             showSuccess("购买请求已提交，等待处理\n订单ID: \(order.id)")
             
         case .cancelled(let order):
@@ -1319,24 +1328,26 @@ class OrderDetailsViewController: UIViewController {
         isRefreshing = true
         navigationItem.rightBarButtonItem?.isEnabled = false
         
-        iapManager.queryOrderStatus(order.id) { [weak self] result in
-            DispatchQueue.main.async {
-                self?.isRefreshing = false
-                self?.navigationItem.rightBarButtonItem?.isEnabled = true
-                
-                switch result {
-                case .success(let status):
-                    self?.currentStatus = status
-                    self?.tableView.reloadData()
-                    
-                case .failure(let error):
+        Task {
+            do {
+                let status = try await iapManager.queryOrderStatus(order.id)
+                await MainActor.run {
+                    self.isRefreshing = false
+                    self.navigationItem.rightBarButtonItem?.isEnabled = true
+                    self.currentStatus = status
+                    self.tableView.reloadData()
+                }
+            } catch {
+                await MainActor.run {
+                    self.isRefreshing = false
+                    self.navigationItem.rightBarButtonItem?.isEnabled = true
                     let alert = UIAlertController(
                         title: "刷新失败",
                         message: error.localizedDescription,
                         preferredStyle: .alert
                     )
                     alert.addAction(UIAlertAction(title: "确定", style: .default))
-                    self?.present(alert, animated: true)
+                    self.present(alert, animated: true)
                 }
             }
         }

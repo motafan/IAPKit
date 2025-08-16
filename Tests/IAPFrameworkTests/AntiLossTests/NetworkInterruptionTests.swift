@@ -381,10 +381,8 @@ func testBatchRetryAfterNetworkRecovery() async throws {
     // When - 模拟网络恢复后的批量重试
     mockAdapter.reset() // 清除错误状态，模拟网络恢复
     
-    var recoveryResults: [RecoveryResult] = []
-    await recoveryManager.startRecovery { result in
-        recoveryResults.append(result)
-    }
+    let recoveryResult = await recoveryManager.startRecovery()
+    let recoveryResults = [recoveryResult]
     
     // Then
     #expect(!recoveryResults.isEmpty)

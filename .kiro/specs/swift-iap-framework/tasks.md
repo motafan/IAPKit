@@ -192,12 +192,7 @@ All core framework components have been implemented:
     - Verify order expiration handling
     - _Requirements: 10.5_
 
-- ~~[REMOVED] 10.4 Add Completion-Based Purchase API~~ ❌
-  - **Decision**: Completion-based API is not needed
-  - **Rationale**: Modern async/await API is sufficient for all use cases
-  - **Current API**: Framework provides comprehensive async/await purchase methods:
-    - `purchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult`
-    - `purchase(productID: String, userInfo: [String: Any]?) async throws -> IAPPurchaseResult`
+
 
 ### 🎉 Implementation Complete!
 

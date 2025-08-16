@@ -95,9 +95,10 @@ class UIKitExampleSettingsViewController: UIViewController {
         iapManager.delegate = self
         
         // 初始化管理器
-        iapManager.initialize { [weak self] in
-            DispatchQueue.main.async {
-                self?.tableView.reloadData()
+        Task {
+            await iapManager.initialize()
+            await MainActor.run {
+                self.tableView.reloadData()
             }
         }
     }
@@ -172,15 +173,16 @@ class UIKitExampleSettingsViewController: UIViewController {
     }
     
     private func performRestorePurchases() {
-        iapManager.restorePurchases { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let transactions):
+        Task {
+            do {
+                let transactions = try await iapManager.restorePurchases()
+                await MainActor.run {
                     let message = transactions.isEmpty ? "没有找到可恢复的购买" : "成功恢复 \(transactions.count) 个购买项目"
-                    self?.showAlert(title: "恢复完成", message: message)
-                    
-                case .failure(let error):
-                    self?.showAlert(title: "恢复失败", message: error.localizedDescription)
+                    self.showAlert(title: "恢复完成", message: message)
+                }
+            } catch {
+                await MainActor.run {
+                    self.showAlert(title: "恢复失败", message: error.localizedDescription)
                 }
             }
         }
@@ -211,14 +213,15 @@ class UIKitExampleSettingsViewController: UIViewController {
             "com.example.yearly_subscription"
         ]
         
-        iapManager.loadProducts(productIDs: productIDs) { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let products):
-                    self?.showAlert(title: "加载完成", message: "成功加载 \(products.count) 个商品")
-                    
-                case .failure(let error):
-                    self?.showAlert(title: "加载失败", message: error.localizedDescription)
+        Task {
+            do {
+                let products = try await iapManager.loadProducts(productIDs: productIDs)
+                await MainActor.run {
+                    self.showAlert(title: "加载完成", message: "成功加载 \(products.count) 个商品")
+                }
+            } catch {
+                await MainActor.run {
+                    self.showAlert(title: "加载失败", message: error.localizedDescription)
                 }
             }
         }
@@ -240,8 +243,12 @@ class UIKitExampleSettingsViewController: UIViewController {
         alert.addAction(UIAlertAction(title: "重置", style: .destructive) { [weak self] _ in
             // 这里可以添加重置框架的实际代码
             self?.iapManager.cleanup()
-            self?.iapManager.initialize { }
-            self?.showAlert(title: "完成", message: "框架已重置")
+            Task {
+                await self?.iapManager.initialize()
+                await MainActor.run {
+                    self?.showAlert(title: "完成", message: "框架已重置")
+                }
+            }
         })
         
         present(alert, animated: true)

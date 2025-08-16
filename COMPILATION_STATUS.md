@@ -1,6 +1,36 @@
-# IAPFramework 测试文件编译问题修复状态
+# IAPFramework 编译问题修复状态
 
 ## 已修复的问题
+
+### Examples 工程编译问题修复
+
+✅ **Examples 工程编译问题已修复完成**
+
+修复的主要问题包括：
+
+1. **API 不匹配问题**: UIKit 示例文件使用了回调风格的 API，但 UIKitIAPManager 只提供 async/await API
+   - 修复方法：将所有回调风格的调用转换为 async/await 模式
+   - 涉及的方法：`initialize`, `loadProducts`, `restorePurchases`, `purchase`, `finishTransaction`, `queryOrderStatus`
+
+2. **错误类型转换问题**: `Error` 类型需要转换为 `IAPError` 类型
+   - 修复方法：使用 `error as? IAPError ?? IAPError.unknownError("Unknown error occurred")` 进行安全转换
+
+3. **未使用变量警告**: 修复了 `transaction` 变量未使用的警告
+   - 修复方法：将 `let transaction` 改为 `_`
+
+### 修复的文件
+- `Examples/Examples/UIKit/UIKitExampleSettingsViewController.swift`
+- `Examples/Examples/UIKit/UIKitExampleStoreViewController.swift`
+
+### 验证结果
+
+```bash
+# 编译 Examples 工程
+xcodebuild -project Examples.xcodeproj -scheme Examples -configuration Debug -sdk iphonesimulator CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO build
+# ✅ BUILD SUCCEEDED
+```
+
+## 测试文件编译问题修复状态
 
 ### 1. Sendable闭包捕获问题
 - **问题**: 在并发代码中修改捕获的变量 `attemptCount`

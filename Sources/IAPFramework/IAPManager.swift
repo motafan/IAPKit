@@ -276,33 +276,15 @@ public final class IAPManager: IAPManagerProtocol {
         
         // 如果配置了自动恢复，则启动恢复流程
         if configuration.autoRecoverTransactions {
-            await recoveryManager.startRecovery { [weak self] result in
-                if #available(iOS 13.0, macOS 10.15, *) {
-                    Task { @MainActor in
-                        switch result {
-                        case .success(let count):
-                            IAPLogger.info("IAPManager: Auto-recovery completed, recovered \(count) transactions")
-                        case .failure(let error):
-                            IAPLogger.logError(error, context: ["operation": "auto-recovery"])
-                            self?.state.setError(error)
-                        case .alreadyInProgress:
-                            break
-                        }
-                    }
-                } else {
-                    // 对于更早的版本，直接在主队列执行
-                    DispatchQueue.main.async {
-                        switch result {
-                        case .success(let count):
-                            IAPLogger.info("IAPManager: Auto-recovery completed, recovered \(count) transactions")
-                        case .failure(let error):
-                            IAPLogger.logError(error, context: ["operation": "auto-recovery"])
-                            self?.state.setError(error)
-                        case .alreadyInProgress:
-                            break
-                        }
-                    }
-                }
+            let result = await recoveryManager.startRecovery()
+            switch result {
+            case .success(let count):
+                IAPLogger.info("IAPManager: Auto-recovery completed, recovered \(count) transactions")
+            case .failure(let error):
+                IAPLogger.logError(error, context: ["operation": "auto-recovery"])
+                state.setError(error)
+            case .alreadyInProgress:
+                break
             }
         }
         
@@ -644,9 +626,9 @@ public final class IAPManager: IAPManagerProtocol {
     }
     
     /// 手动触发交易恢复
-    /// - Parameter completion: 恢复完成回调
-    public func recoverTransactions(completion: @escaping (RecoveryResult) -> Void = { _ in }) async {
-        await recoveryManager.startRecovery(completion: completion)
+    /// - Returns: 恢复结果
+    public func recoverTransactions() async -> RecoveryResult {
+        return await recoveryManager.startRecovery()
     }
     
     /// 清除商品缓存

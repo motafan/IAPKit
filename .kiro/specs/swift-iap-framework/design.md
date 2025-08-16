@@ -1209,10 +1209,8 @@ public final class IAPManager: ObservableObject {
 extension IAPManager {
     // UIKit 友好的回调接口
     public func loadProducts(
-        productIDs: Set<String>,
-        completion: @escaping (Result<[IAPProduct], Error>) -> Void
-    ) {
-        Task { @MainActor in
+        productIDs: Set<String>
+    ) async throws -> [IAPProduct] {
             do {
                 let products = try await loadProducts(productIDs: productIDs)
                 completion(.success(products))

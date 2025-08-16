@@ -236,13 +236,9 @@ func testTransactionRecoveryManagerBasicFunctionality() async throws {
     await mockAdapter.setMockPendingTransactions(pendingTransactions)
     
     // When
-    var recoveryResult: RecoveryResult?
-    await recoveryManager.startRecovery { result in
-        recoveryResult = result
-    }
+    let recoveryResult = await recoveryManager.startRecovery()
     
     // Then
-    #expect(recoveryResult != nil)
     if case .success(let recoveredCount) = recoveryResult {
         #expect(recoveredCount == 2)
     } else {
@@ -272,13 +268,9 @@ func testTransactionRecoveryManagerEmptyQueue() async throws {
     await mockAdapter.setMockPendingTransactions([])
     
     // When
-    var recoveryResult: RecoveryResult?
-    await recoveryManager.startRecovery { result in
-        recoveryResult = result
-    }
+    let recoveryResult = await recoveryManager.startRecovery()
     
     // Then
-    #expect(recoveryResult != nil)
     if case .success(let recoveredCount) = recoveryResult {
         #expect(recoveredCount == 0)
     } else {
@@ -312,13 +304,9 @@ func testNetworkInterruptionScenario() async throws {
     await mockAdapter.setMockPendingTransactions(interruptedTransactions)
     
     // When - 模拟应用重启后的恢复
-    var recoveryResult: RecoveryResult?
-    await recoveryManager.startRecovery { result in
-        recoveryResult = result
-    }
+    let recoveryResult = await recoveryManager.startRecovery()
     
     // Then
-    #expect(recoveryResult != nil)
     
     let stats = recoveryManager.getRecoveryStatistics()
     #expect(stats.totalTransactions == 3)

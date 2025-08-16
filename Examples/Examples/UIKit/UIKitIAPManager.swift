@@ -113,271 +113,212 @@ public final class UIKitIAPManager {
     // MARK: - Public Methods
     
     /// 初始化框架
-    public func initialize(completion: @escaping () -> Void = {}) {
-        Task {
-            let configuration = IAPConfiguration(
-                autoFinishTransactions: false,
-                maxRetryAttempts: 3
-            )
-            
-            // Note: IAPManager.shared doesn't have a configure method
-            // This is a placeholder for configuration logic
-            print("Initializing with configuration: \(configuration)")
-            
-            // 启动状态监听
-            startStatusMonitoring()
-            
-            // 更新交易监听状态
-            updateTransactionObserverStatus()
-            
-            await MainActor.run {
-                completion()
-            }
-        }
+    public func initialize() async {
+        let configuration = IAPConfiguration(
+            autoFinishTransactions: false,
+            maxRetryAttempts: 3
+        )
+        
+        // Note: IAPManager.shared doesn't have a configure method
+        // This is a placeholder for configuration logic
+        print("Initializing with configuration: \(configuration)")
+        
+        // 启动状态监听
+        startStatusMonitoring()
+        
+        // 更新交易监听状态
+        updateTransactionObserverStatus()
     }
     
     /// 加载商品
-    public func loadProducts(productIDs: Set<String>, completion: @escaping (Result<[IAPProduct], IAPError>) -> Void) {
+    public func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct] {
         guard !isLoadingProducts else {
-            completion(.failure(.configurationError("Manager is already loading products")))
-            return
+            throw IAPError.configurationError("Manager is already loading products")
         }
         
         isLoadingProducts = true
         clearError()
         
-        Task {
-            do {
-                let loadedProducts = try await coreManager.loadProducts(productIDs: productIDs)
-                
-                await MainActor.run {
-                    self.products = loadedProducts
-                    self.isLoadingProducts = false
-                    self.delegate?.iapManager(self, didLoadProducts: loadedProducts)
-                    completion(.success(loadedProducts))
-                }
-            } catch {
-                await MainActor.run {
-                    self.isLoadingProducts = false
-                    let iapError = error as? IAPError ?? .unknownError("Failed to load products")
-                    self.lastError = iapError
-                    self.delegate?.iapManager(self, didFailToLoadProducts: iapError)
-                    completion(.failure(iapError))
-                }
-            }
+        defer {
+            isLoadingProducts = false
+        }
+        
+        do {
+            let loadedProducts = try await coreManager.loadProducts(productIDs: productIDs)
+            
+            self.products = loadedProducts
+            self.delegate?.iapManager(self, didLoadProducts: loadedProducts)
+            return loadedProducts
+        } catch {
+            let iapError = error as? IAPError ?? .unknownError("Failed to load products")
+            self.lastError = iapError
+            self.delegate?.iapManager(self, didFailToLoadProducts: iapError)
+            throw iapError
         }
     }
     
     /// 购买商品（使用订单）
-    public func purchase(_ product: IAPProduct, userInfo: [String: Any]? = nil, completion: @escaping (Result<IAPPurchaseResult, IAPError>) -> Void) {
+    public func purchase(_ product: IAPProduct, userInfo: [String: Any]? = nil) async throws -> IAPPurchaseResult {
         guard !purchasingProducts.contains(product.id) else {
-            completion(.failure(.configurationError("Product is already being purchased")))
-            return
+            throw IAPError.configurationError("Product is already being purchased")
         }
         
         purchasingProducts.insert(product.id)
         clearError()
         
-        Task {
-            do {
-                let result = try await coreManager.purchase(product, userInfo: userInfo)
-                
-                await MainActor.run {
-                    self.purchasingProducts.remove(product.id)
-                    
-                    // 更新最近交易和订单
-                    switch result {
-                    case .success(let transaction, let order):
-                        self.addRecentTransaction(transaction)
-                        self.addRecentOrder(order)
-                    case .pending(let transaction, let order):
-                        self.addRecentTransaction(transaction)
-                        self.addRecentOrder(order)
-                    case .cancelled(let order), .failed(_, let order):
-                        if let order = order {
-                            self.addRecentOrder(order)
-                        }
-                    }
-                    
-                    self.delegate?.iapManager(self, didCompletePurchase: result)
-                    completion(.success(result))
-                }
-            } catch {
-                await MainActor.run {
-                    self.purchasingProducts.remove(product.id)
-                    let iapError = error as? IAPError ?? .unknownError("Failed to purchase product")
-                    self.lastError = iapError
-                    self.delegate?.iapManager(self, didFailPurchase: iapError)
-                    completion(.failure(iapError))
+        defer {
+            purchasingProducts.remove(product.id)
+        }
+        
+        do {
+            let result = try await coreManager.purchase(product, userInfo: userInfo)
+            
+            // 更新最近交易和订单
+            switch result {
+            case .success(let transaction, let order):
+                self.addRecentTransaction(transaction)
+                self.addRecentOrder(order)
+            case .pending(let transaction, let order):
+                self.addRecentTransaction(transaction)
+                self.addRecentOrder(order)
+            case .cancelled(let order), .failed(_, let order):
+                if let order = order {
+                    self.addRecentOrder(order)
                 }
             }
+            
+            self.delegate?.iapManager(self, didCompletePurchase: result)
+            return result
+        } catch {
+            let iapError = error as? IAPError ?? .unknownError("Failed to purchase product")
+            self.lastError = iapError
+            self.delegate?.iapManager(self, didFailPurchase: iapError)
+            throw iapError
         }
     }
     
     /// 购买商品（向后兼容，不使用订单）
-    public func purchaseWithoutOrder(_ product: IAPProduct, completion: @escaping (Result<IAPPurchaseResult, IAPError>) -> Void) {
-        purchase(product, userInfo: nil, completion: completion)
+    public func purchaseWithoutOrder(_ product: IAPProduct) async throws -> IAPPurchaseResult {
+        return try await purchase(product, userInfo: nil)
     }
     
     /// 恢复购买
-    public func restorePurchases(completion: @escaping (Result<[IAPTransaction], IAPError>) -> Void) {
+    public func restorePurchases() async throws -> [IAPTransaction] {
         guard !isRestoringPurchases else {
-            completion(.failure(.configurationError("Already restoring purchases")))
-            return
+            throw IAPError.configurationError("Already restoring purchases")
         }
         
         isRestoringPurchases = true
         clearError()
         
-        Task {
-            do {
-                let transactions = try await coreManager.restorePurchases()
-                
-                await MainActor.run {
-                    self.isRestoringPurchases = false
-                    
-                    // 更新最近交易
-                    for transaction in transactions {
-                        self.addRecentTransaction(transaction)
-                    }
-                    
-                    self.delegate?.iapManager(self, didRestorePurchases: transactions)
-                    completion(.success(transactions))
-                }
-            } catch {
-                await MainActor.run {
-                    self.isRestoringPurchases = false
-                    let iapError = error as? IAPError ?? .unknownError("Failed to restore purchases")
-                    self.lastError = iapError
-                    self.delegate?.iapManager(self, didFailToRestorePurchases: iapError)
-                    completion(.failure(iapError))
-                }
+        defer {
+            isRestoringPurchases = false
+        }
+        
+        do {
+            let transactions = try await coreManager.restorePurchases()
+            
+            // 更新最近交易
+            for transaction in transactions {
+                self.addRecentTransaction(transaction)
             }
+            
+            self.delegate?.iapManager(self, didRestorePurchases: transactions)
+            return transactions
+        } catch {
+            let iapError = error as? IAPError ?? .unknownError("Failed to restore purchases")
+            self.lastError = iapError
+            self.delegate?.iapManager(self, didFailToRestorePurchases: iapError)
+            throw iapError
         }
     }
     
     /// 完成交易
-    public func finishTransaction(_ transaction: IAPTransaction, completion: @escaping (Result<Void, IAPError>) -> Void) {
-        Task {
-            // 这里可以添加完成交易的逻辑
-            // 由于 IAPManager 可能没有直接的 finishTransaction 方法
-            // 我们可以通过其他方式处理
-            print("完成交易: \(transaction.id)")
-            
-            await MainActor.run {
-                completion(.success(()))
-            }
-        }
+    public func finishTransaction(_ transaction: IAPTransaction) async throws {
+        // 这里可以添加完成交易的逻辑
+        // 由于 IAPManager 可能没有直接的 finishTransaction 方法
+        // 我们可以通过其他方式处理
+        print("完成交易: \(transaction.id)")
+        
+        try await coreManager.finishTransaction(transaction)
     }
     
     /// 验证收据
-    public func validateReceipt(_ receiptData: Data, completion: @escaping (Result<IAPReceiptValidationResult, IAPError>) -> Void) {
+    public func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult {
         clearError()
         
-        Task {
-            do {
-                let result = try await coreManager.validateReceipt(receiptData)
-                
-                await MainActor.run {
-                    completion(.success(result))
-                }
-            } catch {
-                await MainActor.run {
-                    let iapError = error as? IAPError ?? .unknownError("Failed to validate receipt")
-                    self.lastError = iapError
-                    completion(.failure(iapError))
-                }
-            }
+        do {
+            let result = try await coreManager.validateReceipt(receiptData)
+            return result
+        } catch {
+            let iapError = error as? IAPError ?? .unknownError("Failed to validate receipt")
+            self.lastError = iapError
+            throw iapError
         }
     }
     
     /// 验证收据（包含订单信息）
-    public func validateReceipt(_ receiptData: Data, with order: IAPOrder, completion: @escaping (Result<IAPReceiptValidationResult, IAPError>) -> Void) {
+    public func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult {
         clearError()
         
-        Task {
-            do {
-                let result = try await coreManager.validateReceipt(receiptData, with: order)
-                
-                await MainActor.run {
-                    completion(.success(result))
-                }
-            } catch {
-                await MainActor.run {
-                    let iapError = error as? IAPError ?? .unknownError("Failed to validate receipt")
-                    self.lastError = iapError
-                    completion(.failure(iapError))
-                }
-            }
+        do {
+            let result = try await coreManager.validateReceipt(receiptData, with: order)
+            return result
+        } catch {
+            let iapError = error as? IAPError ?? .unknownError("Failed to validate receipt")
+            self.lastError = iapError
+            throw iapError
         }
     }
     
     /// 创建订单
-    public func createOrder(for product: IAPProduct, userInfo: [String: Any]? = nil, completion: @escaping (Result<IAPOrder, IAPError>) -> Void) {
+    public func createOrder(for product: IAPProduct, userInfo: [String: Any]? = nil) async throws -> IAPOrder {
         guard !creatingOrders.contains(product.id) else {
-            completion(.failure(.configurationError("Order is already being created for this product")))
-            return
+            throw IAPError.configurationError("Order is already being created for this product")
         }
         
         creatingOrders.insert(product.id)
         clearError()
         
-        Task {
-            do {
-                let order = try await coreManager.createOrder(for: product, userInfo: userInfo)
-                
-                await MainActor.run {
-                    self.creatingOrders.remove(product.id)
-                    self.addActiveOrder(order)
-                    self.addRecentOrder(order)
-                    self.delegate?.iapManager(self, didCreateOrder: order)
-                    completion(.success(order))
-                }
-            } catch {
-                await MainActor.run {
-                    self.creatingOrders.remove(product.id)
-                    let iapError = error as? IAPError ?? .unknownError("Failed to create order")
-                    self.lastError = iapError
-                    self.delegate?.iapManager(self, didFailToCreateOrder: iapError, for: product.id)
-                    completion(.failure(iapError))
-                }
-            }
+        defer {
+            creatingOrders.remove(product.id)
+        }
+        
+        do {
+            let order = try await coreManager.createOrder(for: product, userInfo: userInfo)
+            
+            self.addActiveOrder(order)
+            self.addRecentOrder(order)
+            self.delegate?.iapManager(self, didCreateOrder: order)
+            return order
+        } catch {
+            let iapError = error as? IAPError ?? .unknownError("Failed to create order")
+            self.lastError = iapError
+            self.delegate?.iapManager(self, didFailToCreateOrder: iapError, for: product.id)
+            throw iapError
         }
     }
     
     /// 查询订单状态
-    public func queryOrderStatus(_ orderID: String, completion: @escaping (Result<IAPOrderStatus, IAPError>) -> Void) {
+    public func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus {
         clearError()
         
-        Task {
-            do {
-                let status = try await coreManager.queryOrderStatus(orderID)
-                
-                await MainActor.run {
-                    self.updateOrderStatus(orderID, status: status)
-                    completion(.success(status))
-                }
-            } catch {
-                await MainActor.run {
-                    let iapError = error as? IAPError ?? .unknownError("Failed to query order status")
-                    self.lastError = iapError
-                    completion(.failure(iapError))
-                }
-            }
+        do {
+            let status = try await coreManager.queryOrderStatus(orderID)
+            self.updateOrderStatus(orderID, status: status)
+            return status
+        } catch {
+            let iapError = error as? IAPError ?? .unknownError("Failed to query order status")
+            self.lastError = iapError
+            throw iapError
         }
     }
     
     /// 配置框架
-    public func configure(with configuration: IAPConfiguration, completion: @escaping () -> Void = {}) {
-        Task {
-            // Note: IAPManager.shared doesn't have a configure method
-            // This is a placeholder for configuration logic
-            print("Configuring with: \(configuration)")
-            
-            await MainActor.run {
-                completion()
-            }
-        }
+    public func configure(with configuration: IAPConfiguration) async {
+        // Note: IAPManager.shared doesn't have a configure method
+        // This is a placeholder for configuration logic
+        print("Configuring with: \(configuration)")
     }
     
     /// 清理资源

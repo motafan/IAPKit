@@ -8,10 +8,10 @@
 
 import UIKit
 import Foundation
-import IAPFramework
+import IAPKit
 
 /// UIKit IAP 管理器
-/// 将 IAPFramework 包装为 UIKit 兼容的委托模式接口
+/// 将 IAPKit 包装为 UIKit 兼容的委托模式接口
 @MainActor
 public final class UIKitIAPManager {
     
@@ -107,8 +107,7 @@ public final class UIKitIAPManager {
     deinit {
         // In Swift 6, we cannot use Task in deinit as it may outlive the object.
         // The cleanup should be handled by the app lifecycle or manual calls to cleanup().
-        // Task cancellation is thread-safe and synchronous.
-        statusMonitoringTask?.cancel()
+        // We'll handle cleanup in the cleanup() method instead.
     }
     
     // MARK: - Public Methods
@@ -379,7 +378,8 @@ public final class UIKitIAPManager {
                 
                 // 等待1秒，如果任务被取消则立即退出
                 do {
-                    try await Task.sleep(for: .seconds(1))
+                    // 使用 iOS 15.0+ 兼容的 sleep 方法
+                    try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
                 } catch {
                     // Task被取消，退出循环
                     break
@@ -389,7 +389,7 @@ public final class UIKitIAPManager {
     }
     
     /// 停止状态监控
-    private nonisolated func stopStatusMonitoring() {
+    private func stopStatusMonitoring() {
         // Task cancellation is thread-safe
         statusMonitoringTask?.cancel()
         statusMonitoringTask = nil

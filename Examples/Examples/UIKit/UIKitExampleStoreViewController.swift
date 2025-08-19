@@ -7,7 +7,7 @@
 //
 
 import UIKit
-import IAPFramework
+import IAPKit
 
 /// UIKit 商店视图控制器示例
 class UIKitExampleStoreViewController: UIViewController {

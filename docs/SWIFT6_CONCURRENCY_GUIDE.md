@@ -2,7 +2,7 @@
 
 ## 概述
 
-本文档描述了 IAPFramework 在 Swift 6 严格并发模式下的最佳实践和安全考虑。
+本文档描述了 IAPKit 在 Swift 6 严格并发模式下的最佳实践和安全考虑。
 
 ## Timer 的线程安全问题
 
@@ -244,7 +244,7 @@ public final class SwiftUIIAPManager: ObservableObject {
 
 ## 总结
 
-Swift 6 的严格并发模式要求我们更加谨慎地处理对象生命周期和资源清理。通过遵循这些最佳实践，我们可以确保 IAPFramework 在并发环境下的安全性和可靠性。
+Swift 6 的严格并发模式要求我们更加谨慎地处理对象生命周期和资源清理。通过遵循这些最佳实践，我们可以确保 IAPKit 在并发环境下的安全性和可靠性。
 
 关键原则：
 1. deinit 中只进行同步、线程安全的操作

@@ -8,10 +8,10 @@
 
 import SwiftUI
 import Combine
-import IAPFramework
+import IAPKit
 
 /// SwiftUI IAP 管理器
-/// 将 IAPFramework 包装为 SwiftUI 兼容的 ObservableObject
+/// 将 IAPKit 包装为 SwiftUI 兼容的 ObservableObject
 @MainActor
 public final class SwiftUIIAPManager: ObservableObject {
     
@@ -341,7 +341,8 @@ public final class SwiftUIIAPManager: ObservableObject {
                 
                 // 等待1秒，如果任务被取消则立即退出
                 do {
-                    try await Task.sleep(for: .seconds(1))
+                    // 使用 iOS 15.0+ 兼容的 sleep 方法
+                    try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
                 } catch {
                     // Task被取消，退出循环
                     break
@@ -351,7 +352,7 @@ public final class SwiftUIIAPManager: ObservableObject {
     }
     
     /// 停止状态监控
-    private nonisolated func stopStatusMonitoring() {
+    private func stopStatusMonitoring() {
         // Task cancellation is thread-safe
         statusMonitoringTask?.cancel()
         statusMonitoringTask = nil

@@ -7,7 +7,7 @@
 //
 
 import SwiftUI
-import IAPFramework
+import IAPKit
 
 /// SwiftUI 设置页面示例
 @available(iOS 15.0, *)

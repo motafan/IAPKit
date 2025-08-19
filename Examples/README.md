@@ -1,6 +1,6 @@
-# IAPFramework Examples
+# IAPKit Examples
 
-这个 Examples 项目展示了如何在 iOS 应用中集成和使用 IAPFramework。
+这个 Examples 项目展示了如何在 iOS 应用中集成和使用 IAPKit。
 
 ## 项目结构
 
@@ -16,7 +16,7 @@ Examples/
 │   ├── UIKit/                      # UIKit 示例
 │   │   └── ExampleTabBarController.swift     # UIKit 主控制器
 │   ├── Supporting Files/           # 支持文件
-│   │   └── IAPFrameworkBridge.swift          # 框架桥接文件
+│   │   └── IAPKitBridge.swift          # 框架桥接文件
 │   ├── AppDelegate.swift           # 应用委托
 │   ├── SceneDelegate.swift         # 场景委托
 │   └── ViewController.swift        # 主视图控制器
@@ -66,18 +66,18 @@ Examples/
 1. 在 Xcode 中打开 Examples 项目
 2. 选择 `File` > `Add Package Dependencies...`
 3. 输入框架的 Git URL 或选择本地路径
-4. 添加 `IAPFramework` 依赖
+4. 添加 `IAPKit` 依赖
 
 ### 方式二：本地引用
 
-1. 将 `IAPFramework` 源代码复制到项目中
+1. 将 `IAPKit` 源代码复制到项目中
 2. 在项目设置中添加源文件
 3. 确保正确的模块导入
 
 ### 方式三：使用桥接文件
 
 如果无法直接引用框架，可以使用提供的桥接文件：
-- `IAPFrameworkBridge.swift` 包含了必要的类型定义
+- `IAPKitBridge.swift` 包含了必要的类型定义
 - 提供模拟实现用于演示
 
 ## 使用方法
@@ -245,6 +245,6 @@ struct StatusView: View {
 
 ## 更多资源
 
-- [IAPFramework 文档](../README.md)
+- [IAPKit 文档](../README.md)
 - [Apple StoreKit 文档](https://developer.apple.com/documentation/storekit)
 - [App Store Connect 指南](https://developer.apple.com/app-store-connect/)

@@ -3,11 +3,11 @@
 //  Examples
 //
 //  SwiftUI 示例应用
-//  展示如何在 SwiftUI 应用中集成和使用 IAPFramework
+//  展示如何在 SwiftUI 应用中集成和使用 IAPKit
 //
 
 import SwiftUI
-import IAPFramework
+import IAPKit
 
 /// SwiftUI 示例应用主入口
 @available(iOS 14.0, *)

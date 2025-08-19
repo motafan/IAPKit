@@ -7,7 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		7748E80C2E4D8DB900A4A583 /* IAPFramework in Frameworks */ = {isa = PBXBuildFile; productRef = 7748E80B2E4D8DB900A4A583 /* IAPFramework */; };
+		306B5B942E54B4A700300FD3 /* IAPKit in Frameworks */ = {isa = PBXBuildFile; productRef = 306B5B932E54B4A700300FD3 /* IAPKit */; };
+		30C042642E54AFFC0027B0F7 /* IAPKit in Frameworks */ = {isa = PBXBuildFile; productRef = 30C042632E54AFFC0027B0F7 /* IAPKit */; };
+		7748E80C2E4D8DB900A4A583 /* IAPKit in Frameworks */ = {isa = PBXBuildFile; productRef = 7748E80B2E4D8DB900A4A583 /* IAPKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,7 +71,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7748E80C2E4D8DB900A4A583 /* IAPFramework in Frameworks */,
+				30C042642E54AFFC0027B0F7 /* IAPKit in Frameworks */,
+				7748E80C2E4D8DB900A4A583 /* IAPKit in Frameworks */,
+				306B5B942E54B4A700300FD3 /* IAPKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -130,7 +134,9 @@
 			);
 			name = Examples;
 			packageProductDependencies = (
-				7748E80B2E4D8DB900A4A583 /* IAPFramework */,
+				7748E80B2E4D8DB900A4A583 /* IAPKit */,
+				30C042632E54AFFC0027B0F7 /* IAPKit */,
+				306B5B932E54B4A700300FD3 /* IAPKit */,
 			);
 			productName = Examples;
 			productReference = 7748E7A92E4D885100A4A583 /* Examples.app */;
@@ -215,7 +221,7 @@
 			mainGroup = 7748E7A02E4D885100A4A583;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				7748E80A2E4D8DB900A4A583 /* XCLocalSwiftPackageReference "../../IAPFramework" */,
+				306B5B922E54B4A700300FD3 /* XCLocalSwiftPackageReference "../../IAPKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 7748E7AA2E4D885100A4A583 /* Products */;
@@ -586,16 +592,24 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		7748E80A2E4D8DB900A4A583 /* XCLocalSwiftPackageReference "../../IAPFramework" */ = {
+		306B5B922E54B4A700300FD3 /* XCLocalSwiftPackageReference "../../IAPKit" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../IAPFramework;
+			relativePath = ../../IAPKit;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		7748E80B2E4D8DB900A4A583 /* IAPFramework */ = {
+		306B5B932E54B4A700300FD3 /* IAPKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = IAPFramework;
+			productName = IAPKit;
+		};
+		30C042632E54AFFC0027B0F7 /* IAPKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = IAPKit;
+		};
+		7748E80B2E4D8DB900A4A583 /* IAPKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = IAPKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

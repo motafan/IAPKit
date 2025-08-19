@@ -7,7 +7,7 @@
 //
 
 import SwiftUI
-import IAPFramework
+import IAPKit
 
 /// SwiftUI 商店界面示例
 struct SwiftUIExampleStoreView: View {

@@ -73,7 +73,7 @@ Or add it through Xcode:
 ### Basic Setup
 
 ```swift
-import IAPFramework
+import IAPKit
 
 class AppDelegate: UIApplicationDelegate {
     func application(_ application: UIApplication, 
@@ -97,7 +97,7 @@ class AppDelegate: UIApplicationDelegate {
 ### Loading Products
 
 ```swift
-import IAPFramework
+import IAPKit
 
 class StoreViewController: UIViewController {
     private let iapManager = IAPManager.shared
@@ -262,7 +262,7 @@ private func restorePurchases() {
 
 ```swift
 import SwiftUI
-import IAPFramework
+import IAPKit
 
 @MainActor
 class IAPStore: ObservableObject {
@@ -658,7 +658,7 @@ do {
 
 ```swift
 import XCTest
-@testable import IAPFramework
+@testable import IAPKit
 
 class IAPManagerTests: XCTestCase {
     private var mockAdapter: MockStoreKitAdapter!

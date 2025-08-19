@@ -27,7 +27,7 @@ This comprehensive guide covers all aspects of using the Swift IAP Framework, fr
 #### Manual Installation
 
 1. Download the framework source code
-2. Drag the `IAPFramework` folder into your Xcode project
+2. Drag the `IAPKit` folder into your Xcode project
 3. Ensure the framework is added to your target's dependencies
 
 ### Initial Setup
@@ -36,7 +36,7 @@ This comprehensive guide covers all aspects of using the Swift IAP Framework, fr
 
 ```swift
 import UIKit
-import IAPFramework
+import IAPKit
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -70,7 +70,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 ```swift
 import SwiftUI
-import IAPFramework
+import IAPKit
 
 @main
 struct MyApp: App {
@@ -96,7 +96,7 @@ struct MyApp: App {
 ### Custom Configuration
 
 ```swift
-import IAPFramework
+import IAPKit
 
 // Create custom configuration
 var config = IAPConfiguration.default
@@ -117,7 +117,7 @@ await customManager.initialize()
 #### Simple Product Loading
 
 ```swift
-import IAPFramework
+import IAPKit
 
 class ProductLoader {
     private let iapManager = IAPManager.shared
@@ -1014,7 +1014,7 @@ class TransactionRecoveryManager {
 
 ```swift
 import Foundation
-import IAPFramework
+import IAPKit
 
 class ServerReceiptValidator: ReceiptValidatorProtocol {
     private let serverURL: URL
@@ -1140,7 +1140,7 @@ class SubscriptionManager {
 
 ```swift
 import SwiftUI
-import IAPFramework
+import IAPKit
 
 // MARK: - Store ObservableObject
 
@@ -1414,7 +1414,7 @@ struct SettingsView: View {
 
 ```swift
 import UIKit
-import IAPFramework
+import IAPKit
 
 class StoreViewController: UIViewController {
     
@@ -1759,7 +1759,7 @@ class ProductTableViewCell: UITableViewCell {
 ### Comprehensive Error Handling Strategy
 
 ```swift
-import IAPFramework
+import IAPKit
 
 class ErrorHandler {
     
@@ -1920,7 +1920,7 @@ struct ErrorAlert: Identifiable {
 
 ```swift
 import XCTest
-@testable import IAPFramework
+@testable import IAPKit
 
 class IAPManagerTests: XCTestCase {
     
@@ -2108,7 +2108,7 @@ extension IAPTransaction {
 ```swift
 import XCTest
 import StoreKitTest
-@testable import IAPFramework
+@testable import IAPKit
 
 class IAPIntegrationTests: XCTestCase {
     

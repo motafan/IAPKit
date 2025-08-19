@@ -690,7 +690,7 @@ public typealias TransactionUpdateHandler = (IAPTransaction) -> Void
 
 ```swift
 /// Framework version
-public let IAPFrameworkVersion = "1.0.0"
+public let IAPKitVersion = "1.0.0"
 
 /// Supported iOS version
 public let MinimumIOSVersion = "13.0"

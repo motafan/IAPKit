@@ -12,9 +12,9 @@
 
 ### 目录结构
 ```
-IAPFramework/
-├── Sources/IAPFramework/
-│   ├── IAPFramework.swift              # 框架入口和导出
+IAPKit/
+├── Sources/IAPKit/
+│   ├── IAPKit.swift              # 框架入口和导出
 │   ├── IAPManager.swift                # 主管理类（单例模式）
 │   ├── Adapters/                       # StoreKit 版本抽象层
 │   │   ├── StoreKit1Adapter.swift
@@ -52,7 +52,7 @@ IAPFramework/
 │       ├── fr.lproj/
 │       ├── ja.lproj/
 │       └── zh-Hans.lproj/
-├── Tests/IAPFrameworkTests/
+├── Tests/IAPKitTests/
 │   ├── AdapterTests/                   # 适配器测试
 │   ├── AntiLossTests/                  # 防丢失机制测试
 │   ├── ErrorHandlingTests/             # 错误处理测试

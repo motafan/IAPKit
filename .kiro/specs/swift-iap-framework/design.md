@@ -1156,14 +1156,14 @@ actor IAPCache {
 import PackageDescription
 
 let package = Package(
-    name: "IAPFramework",
+    name: "IAPKit",
     platforms: [
         .iOS(.v13)
     ],
     products: [
         .library(
-            name: "IAPFramework",
-            targets: ["IAPFramework"]
+            name: "IAPKit",
+            targets: ["IAPKit"]
         ),
     ],
     dependencies: [
@@ -1171,15 +1171,15 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "IAPFramework",
+            name: "IAPKit",
             dependencies: [],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]
         ),
         .testTarget(
-            name: "IAPFrameworkTests",
-            dependencies: ["IAPFramework"]
+            name: "IAPKitTests",
+            dependencies: ["IAPKit"]
         ),
     ]
 )

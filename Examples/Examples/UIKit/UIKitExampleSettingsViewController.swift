@@ -7,7 +7,7 @@
 //
 
 import UIKit
-import IAPFramework
+import IAPKit
 
 /// UIKit 设置页面示例
 class UIKitExampleSettingsViewController: UIViewController {

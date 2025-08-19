@@ -8,7 +8,7 @@
 
 import UIKit
 import SwiftUI
-import IAPFramework
+import IAPKit
 
 /// 主标签栏控制器
 class ExampleTabBarController: UITabBarController {

@@ -4,7 +4,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "IAPFramework",
+    name: "IAPKit",
     defaultLocalization: "en",
     platforms: [
         .iOS(.v13),
@@ -12,8 +12,8 @@ let package = Package(
     ],
     products: [
         .library(
-            name: "IAPFramework",
-            targets: ["IAPFramework"]
+            name: "IAPKit",
+            targets: ["IAPKit"]
         ),
     ],
     dependencies: [
@@ -21,7 +21,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "IAPFramework",
+            name: "IAPKit",
             dependencies: [
                 .product(name: "Crypto", package: "swift-crypto")
             ],
@@ -33,8 +33,8 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "IAPFrameworkTests",
-            dependencies: ["IAPFramework"],
+            name: "IAPKitTests",
+            dependencies: ["IAPKit"],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]

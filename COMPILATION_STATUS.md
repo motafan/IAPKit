@@ -1,4 +1,4 @@
-# IAPFramework 编译问题修复状态
+# IAPKit 编译问题修复状态
 
 ## 已修复的问题
 
@@ -8,17 +8,27 @@
 
 修复的主要问题包括：
 
-1. **API 不匹配问题**: UIKit 示例文件使用了回调风格的 API，但 UIKitIAPManager 只提供 async/await API
+1. **iOS 版本兼容性问题**: `Task.sleep(for: .seconds(1))` 和 `.seconds()` 仅在 iOS 16.0+ 可用，但项目目标是 iOS 15.0
+   - 修复方法：使用 `Task.sleep(nanoseconds: 1_000_000_000)` 替代 iOS 16.0+ 的 API
+   - 涉及的文件：`UIKitIAPManager.swift`, `SwiftUIIAPManager.swift`
+
+2. **主线程隔离问题**: `stopStatusMonitoring()` 方法被标记为 `nonisolated` 但访问主线程属性
+   - 修复方法：移除 `nonisolated` 标记，使方法在主线程上执行
+   - 涉及的文件：`UIKitIAPManager.swift`, `SwiftUIIAPManager.swift`
+
+3. **API 不匹配问题**: UIKit 示例文件使用了回调风格的 API，但 UIKitIAPManager 只提供 async/await API
    - 修复方法：将所有回调风格的调用转换为 async/await 模式
    - 涉及的方法：`initialize`, `loadProducts`, `restorePurchases`, `purchase`, `finishTransaction`, `queryOrderStatus`
 
-2. **错误类型转换问题**: `Error` 类型需要转换为 `IAPError` 类型
+4. **错误类型转换问题**: `Error` 类型需要转换为 `IAPError` 类型
    - 修复方法：使用 `error as? IAPError ?? IAPError.unknownError("Unknown error occurred")` 进行安全转换
 
-3. **未使用变量警告**: 修复了 `transaction` 变量未使用的警告
+5. **未使用变量警告**: 修复了 `transaction` 变量未使用的警告
    - 修复方法：将 `let transaction` 改为 `_`
 
 ### 修复的文件
+- `Examples/Examples/UIKit/UIKitIAPManager.swift`
+- `Examples/Examples/SwiftUI/SwiftUIIAPManager.swift`
 - `Examples/Examples/UIKit/UIKitExampleSettingsViewController.swift`
 - `Examples/Examples/UIKit/UIKitExampleStoreViewController.swift`
 
@@ -29,6 +39,8 @@
 xcodebuild -project Examples.xcodeproj -scheme Examples -configuration Debug -sdk iphonesimulator CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO build
 # ✅ BUILD SUCCEEDED
 ```
+
+编译成功！项目现在可以正常构建，只有一些非关键的警告（如已弃用的 API 使用和未使用的变量）。
 
 ## 测试文件编译问题修复状态
 
@@ -64,7 +76,7 @@ xcodebuild -project Examples.xcodeproj -scheme Examples -configuration Debug -sd
 - **解决方案**: 重命名CoreFunctionalityTests.swift中的函数，添加"Core"后缀
 
 ### 7. Foundation导入缺失
-- **问题**: IAPFrameworkTests.swift缺少Foundation导入
+- **问题**: IAPKitTests.swift缺少Foundation导入
 - **解决方案**: 添加 `import Foundation`
 
 ## OrderAntiLossMechanismTests.swift 修复状态
@@ -121,7 +133,7 @@ xcodebuild -project Examples.xcodeproj -scheme Examples -configuration Debug -sd
 - 修复了参数顺序问题
 - 修复了IAPPurchaseResult.cancelled缺少参数的问题
 
-✅ **IAPFrameworkTests.swift 已修复**
+✅ **IAPKitTests.swift 已修复**
 - 修复了相同的配置相关问题
 - 修复了未使用变量的警告
 

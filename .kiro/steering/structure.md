@@ -2,19 +2,19 @@
 
 ## Root Structure
 ```
-IAPFramework/
-├── Sources/IAPFramework/          # Main framework source code
-├── Tests/IAPFrameworkTests/       # Test suite
+IAPKit/
+├── Sources/IAPKit/          # Main framework source code
+├── Tests/IAPKitTests/       # Test suite
 ├── Examples/                      # Example applications (UIKit & SwiftUI)
 ├── docs/                         # Documentation files
 ├── Package.swift                 # SPM configuration
 └── README.md                     # Project documentation
 ```
 
-## Source Code Organization (`Sources/IAPFramework/`)
+## Source Code Organization (`Sources/IAPKit/`)
 
 ### Core Components
-- **IAPFramework.swift**: Framework entry point and exports
+- **IAPKit.swift**: Framework entry point and exports
 - **IAPManager.swift**: Main manager class (singleton pattern)
 
 ### Architecture Layers
@@ -57,7 +57,7 @@ IAPFramework/
     └── zh-Hans.lproj/
 ```
 
-## Test Structure (`Tests/IAPFrameworkTests/`)
+## Test Structure (`Tests/IAPKitTests/`)
 
 ### Test Organization
 ```

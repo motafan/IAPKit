@@ -39,7 +39,7 @@ public final class TransactionRecoveryManager {
         adapter: StoreKitAdapterProtocol,
         orderService: OrderServiceProtocol,
         cache: IAPCache,
-        configuration: IAPConfiguration = .default,
+        configuration: IAPConfiguration,
         stateManager: IAPState? = nil
     ) {
         self.adapter = adapter

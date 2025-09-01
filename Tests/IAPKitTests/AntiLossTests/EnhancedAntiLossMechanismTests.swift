@@ -171,8 +171,15 @@ func testRetryManagerConcurrentOperations() async throws {
 
 @Test("AntiLoss - 重试管理器带重试的操作执行")
 func testRetryManagerExecuteWithRetrySuccess() async throws {
-    // Given
-    let retryManager = RetryManager()
+    // Given - 使用无延迟配置进行测试
+    let config = RetryConfiguration(
+        maxRetries: 3,
+        baseDelay: 0.0,
+        maxDelay: 0.0,
+        backoffMultiplier: 1.0,
+        strategy: .fixed
+    )
+    let retryManager = RetryManager(configuration: config)
     
     // 使用actor来安全地管理计数器
     actor AttemptCounter {
@@ -211,13 +218,13 @@ func testRetryManagerExecuteWithRetrySuccess() async throws {
 
 @Test("AntiLoss - 重试管理器带重试的操作最终失败")
 func testRetryManagerExecuteWithRetryFailure() async throws {
-    // Given
+    // Given - 使用无延迟配置进行测试
     let config = RetryConfiguration(
-        maxRetries: 2,
-        baseDelay: 0.1,
-        maxDelay: 1.0,
-        backoffMultiplier: 2.0,
-        strategy: .exponential
+        maxRetries: 3,
+        baseDelay: 0.0,
+        maxDelay: 0.0,
+        backoffMultiplier: 1.0,
+        strategy: .fixed
     )
     let retryManager = RetryManager(configuration: config)
     
@@ -325,12 +332,13 @@ func testTransactionRecoveryManagerComplexScenario() async throws {
     let mockAdapter = MockStoreKitAdapter()
     let mockOrderService = MockOrderService()
     let mockCache = IAPCache(productCacheExpiration: 3600)
-    let configuration = IAPConfiguration.default
+    let configuration = IAPConfiguration.default(networkBaseURL: URL(string: "https://test.example.com")!)
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
         cache: mockCache,
-        configuration: configuration
+        configuration: configuration,
+        stateManager: IAPState()
     )
     
     // 创建复杂的未完成交易场景
@@ -381,7 +389,9 @@ func testTransactionRecoveryManagerPrioritySorting() async throws {
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
-        cache: mockCache
+        cache: mockCache,
+        configuration: TestConfiguration.defaultIAPConfiguration(),
+        stateManager: IAPState()
     )
     
     let now = Date()
@@ -443,7 +453,9 @@ func testTransactionRecoveryManagerBatchProcessing() async throws {
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
-        cache: mockCache
+        cache: mockCache,
+        configuration: TestConfiguration.defaultIAPConfiguration(),
+        stateManager: IAPState()
     )
     
     // 创建大量未完成交易
@@ -481,7 +493,9 @@ func testNetworkInterruptionComplexScenario() async throws {
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
-        cache: mockCache
+        cache: mockCache,
+        configuration: TestConfiguration.defaultIAPConfiguration(),
+        stateManager: IAPState()
     )
     
     // 模拟网络中断期间积累的各种交易
@@ -529,7 +543,7 @@ func testNetworkInterruptionComplexScenario() async throws {
 func testAppCrashRecoveryComplexScenario() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // 模拟应用崩溃前的复杂状态
     let crashScenarioTransactions = [
@@ -598,7 +612,9 @@ func testRetryMechanismTransactionRecoveryIntegration() async throws {
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
-        cache: mockCache
+        cache: mockCache,
+        configuration: TestConfiguration.defaultIAPConfiguration(),
+        stateManager: IAPState()
     )
     
     // 设置适配器在前几次调用时失败
@@ -658,7 +674,9 @@ func testAntiLossMechanismPerformance() async throws {
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
-        cache: mockCache
+        cache: mockCache,
+        configuration: TestConfiguration.defaultIAPConfiguration(),
+        stateManager: IAPState()
     )
     
     // 创建大量交易来测试性能
@@ -700,7 +718,9 @@ func testAntiLossMechanismMemoryUsage() async throws {
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
-        cache: mockCache
+        cache: mockCache,
+        configuration: TestConfiguration.defaultIAPConfiguration(),
+        stateManager: IAPState()
     )
     
     // When - 处理大量交易并验证内存使用
@@ -734,7 +754,9 @@ func testAntiLossMechanismEdgeCases() async throws {
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
-        cache: mockCache
+        cache: mockCache,
+        configuration: TestConfiguration.defaultIAPConfiguration(),
+        stateManager: IAPState()
     )
     
     // 测试各种边缘情况

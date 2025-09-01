@@ -8,56 +8,114 @@
 import Foundation
 
 /// Response model for order creation API calls
-struct OrderCreationResponse: Sendable, Codable {
-    let orderID: String
-    let serverOrderID: String
-    let status: String
-    let expiresAt: Date?
-    let metadata: [String: String]?
+public struct OrderCreationResponse: Sendable, Codable {
+    public let orderID: String
+    public let serverOrderID: String
+    public let status: String
+    public let expiresAt: Date?
+    public let metadata: [String: String]?
+    
+    public init(orderID: String, serverOrderID: String, status: String, expiresAt: Date? = nil, metadata: [String: String]? = nil) {
+        self.orderID = orderID
+        self.serverOrderID = serverOrderID
+        self.status = status
+        self.expiresAt = expiresAt
+        self.metadata = metadata
+    }
 }
 
 /// Response model for order status queries
-struct OrderStatusResponse: Sendable, Codable {
-    let orderID: String
-    let status: String
-    let updatedAt: Date
-    let metadata: [String: String]?
+public struct OrderStatusResponse: Sendable, Codable {
+    public let orderID: String
+    public let status: String
+    public let updatedAt: Date
+    public let metadata: [String: String]?
+    
+    public init(orderID: String, status: String, updatedAt: Date, metadata: [String: String]? = nil) {
+        self.orderID = orderID
+        self.status = status
+        self.updatedAt = updatedAt
+        self.metadata = metadata
+    }
 }
 
-/// Network client for server API communication
-/// Handles all server-side order management operations
-@MainActor
-final class NetworkClient: Sendable {
+/// Flexible network client for server API communication
+/// Supports customizable request execution, response parsing, and request building
+/// 
+/// This client can be used independently outside the IAPKit framework for general HTTP operations
+/// or integrated with custom order management systems.
+public final class NetworkClient: NetworkClientProtocol, Sendable {
     
     // MARK: - Configuration
     
     private let baseURL: URL
-    private let session: URLSession
     private let retryManager: RetryManager
-    private let timeout: TimeInterval
+    private let requestExecutor: NetworkRequestExecutor
+    private let responseParser: NetworkResponseParser
+    private let requestBuilder: NetworkRequestBuilder
+    private let endpointBuilder: NetworkEndpointBuilder
     
     // MARK: - Initialization
     
-    init(configuration: NetworkConfiguration, retryManager: RetryManager = RetryManager()) {
+    /// Initialize with configuration (supports custom components)
+    public init(configuration: NetworkConfiguration, retryManager: RetryManager = RetryManager()) {
         self.baseURL = configuration.baseURL
-        self.timeout = configuration.timeout
         self.retryManager = retryManager
         
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = configuration.timeout
-        config.timeoutIntervalForResource = configuration.timeout * 2
-        self.session = URLSession(configuration: config)
+        // Use custom components if provided, otherwise use defaults
+        if let customComponents = configuration.customComponents {
+            self.requestExecutor = customComponents.requestExecutor ?? {
+                let sessionConfig = URLSessionConfiguration.default
+                sessionConfig.timeoutIntervalForRequest = configuration.timeout
+                sessionConfig.timeoutIntervalForResource = configuration.timeout * 2
+                let session = URLSession(configuration: sessionConfig)
+                return DefaultNetworkRequestExecutor(session: session)
+            }()
+            
+            self.responseParser = customComponents.responseParser ?? DefaultNetworkResponseParser()
+            self.requestBuilder = customComponents.requestBuilder ?? DefaultNetworkRequestBuilder(timeout: configuration.timeout)
+            self.endpointBuilder = customComponents.endpointBuilder ?? DefaultNetworkEndpointBuilder(baseURL: configuration.baseURL)
+        } else {
+            // Create URLSession with configuration
+            let sessionConfig = URLSessionConfiguration.default
+            sessionConfig.timeoutIntervalForRequest = configuration.timeout
+            sessionConfig.timeoutIntervalForResource = configuration.timeout * 2
+            let session = URLSession(configuration: sessionConfig)
+            
+            // Use default implementations
+            self.requestExecutor = DefaultNetworkRequestExecutor(session: session)
+            self.responseParser = DefaultNetworkResponseParser()
+            self.requestBuilder = DefaultNetworkRequestBuilder(timeout: configuration.timeout)
+            self.endpointBuilder = DefaultNetworkEndpointBuilder(baseURL: configuration.baseURL)
+        }
     }
     
-    // MARK: - Order Creation API
+    /// Initialize with custom components for full flexibility
+    public init(
+        baseURL: URL,
+        retryManager: RetryManager = RetryManager(),
+        requestExecutor: NetworkRequestExecutor,
+        responseParser: NetworkResponseParser,
+        requestBuilder: NetworkRequestBuilder,
+        endpointBuilder: NetworkEndpointBuilder? = nil
+    ) {
+        self.baseURL = baseURL
+        self.retryManager = retryManager
+        self.requestExecutor = requestExecutor
+        self.responseParser = responseParser
+        self.requestBuilder = requestBuilder
+        self.endpointBuilder = endpointBuilder ?? DefaultNetworkEndpointBuilder(baseURL: baseURL)
+    }
+    
+    // MARK: - Order Management API
     
     /// Creates an order on the server
     /// - Parameters:
     ///   - order: The local order to create on server
     /// - Returns: Server response with order details
     /// - Throws: IAPError if creation fails
-    func createOrder(_ order: IAPOrder) async throws -> OrderCreationResponse {
-        let endpoint = baseURL.appendingPathComponent("orders")
+    public func createOrder(_ order: IAPOrder) async throws -> OrderCreationResponse {
+        let endpoint = try await endpointBuilder.buildEndpoint(for: .createOrder, parameters: [:])
         
         let requestBody = [
             "localOrderID": order.id,
@@ -70,29 +128,28 @@ final class NetworkClient: Sendable {
         ] as [String: Any?]
         
         return try await performRequest(
+            action: .createOrder,
             endpoint: endpoint,
-            method: "POST",
             body: requestBody,
-            responseType: OrderCreationResponse.self,
-            operationName: "createOrder"
+            responseType: OrderCreationResponse.self
         )
     }
-    
-    // MARK: - Order Status API
     
     /// Queries order status from server
     /// - Parameter orderID: The order identifier
     /// - Returns: Current order status response
     /// - Throws: IAPError if query fails
-    func queryOrderStatus(_ orderID: String) async throws -> OrderStatusResponse {
-        let endpoint = baseURL.appendingPathComponent("orders/\(orderID)/status")
+    public func queryOrderStatus(_ orderID: String) async throws -> OrderStatusResponse {
+        let endpoint = try await endpointBuilder.buildEndpoint(
+            for: .queryOrderStatus,
+            parameters: ["orderID": orderID]
+        )
         
         return try await performRequest(
+            action: .queryOrderStatus,
             endpoint: endpoint,
-            method: "GET",
             body: nil,
-            responseType: OrderStatusResponse.self,
-            operationName: "queryOrderStatus"
+            responseType: OrderStatusResponse.self
         )
     }
     
@@ -101,8 +158,11 @@ final class NetworkClient: Sendable {
     ///   - orderID: The order identifier
     ///   - status: The new status
     /// - Throws: IAPError if update fails
-    func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) async throws {
-        let endpoint = baseURL.appendingPathComponent("orders/\(orderID)/status")
+    public func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) async throws {
+        let endpoint = try await endpointBuilder.buildEndpoint(
+            for: .updateOrderStatus,
+            parameters: ["orderID": orderID]
+        )
         
         let requestBody = [
             "status": status.rawValue,
@@ -110,64 +170,93 @@ final class NetworkClient: Sendable {
         ]
         
         let _: EmptyResponse = try await performRequest(
+            action: .updateOrderStatus,
             endpoint: endpoint,
-            method: "PUT",
             body: requestBody,
-            responseType: EmptyResponse.self,
-            operationName: "updateOrderStatus"
+            responseType: EmptyResponse.self
+        )
+    }
+    
+    /// Cancels an existing order
+    /// - Parameter orderID: The unique identifier of the order to cancel
+    /// - Throws: IAPError if the order cannot be cancelled
+    public func cancelOrder(_ orderID: String) async throws {
+        let endpoint = try await endpointBuilder.buildEndpoint(
+            for: .cancelOrder,
+            parameters: ["orderID": orderID]
+        )
+        
+        let _: EmptyResponse = try await performRequest(
+            action: .cancelOrder,
+            endpoint: endpoint,
+            body: nil,
+            responseType: EmptyResponse.self
+        )
+    }
+    
+    /// Cleans up expired orders from server
+    /// - Returns: Response containing cleanup statistics
+    /// - Throws: IAPError if cleanup operations fail
+    public func cleanupExpiredOrders() async throws -> CleanupResponse {
+        let endpoint = try await endpointBuilder.buildEndpoint(for: .cleanupExpiredOrders, parameters: [:])
+        
+        return try await performRequest(
+            action: .cleanupExpiredOrders,
+            endpoint: endpoint,
+            body: nil,
+            responseType: CleanupResponse.self
+        )
+    }
+    
+    /// Recovers pending orders from server
+    /// - Returns: Response containing recovered orders
+    /// - Throws: IAPError if recovery operations fail
+    public func recoverPendingOrders() async throws -> OrderRecoveryResponse {
+        let endpoint = try await endpointBuilder.buildEndpoint(for: .recoverPendingOrders, parameters: [:])
+        
+        return try await performRequest(
+            action: .recoverPendingOrders,
+            endpoint: endpoint,
+            body: nil,
+            responseType: OrderRecoveryResponse.self
         )
     }
     
     // MARK: - Private Network Operations
     
     /// Performs HTTP request with retry logic and error handling
+    /// Uses injected components for maximum flexibility
     private func performRequest<T: Codable>(
+        action: OrderServiceAction,
         endpoint: URL,
-        method: String,
         body: [String: Any?]?,
-        responseType: T.Type,
-        operationName: String
+        headers: [String: String]? = nil,
+        responseType: T.Type
     ) async throws -> T {
         
+        let operationName = action.rawValue
         var lastError: Error?
         
         while await retryManager.shouldRetry(for: operationName) {
             do {
                 await retryManager.recordAttempt(for: operationName)
                 
-                var request = URLRequest(url: endpoint)
-                request.httpMethod = method
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.setValue("application/json", forHTTPHeaderField: "Accept")
+                // Build request using injected builder
+                let request = try await requestBuilder.buildRequest(
+                    endpoint: endpoint,
+                    method: action.httpMethod,
+                    body: body,
+                    headers: headers
+                )
                 
-                // Add request body if provided
-                if let body = body {
-                    let jsonData = try JSONSerialization.data(withJSONObject: body, options: [])
-                    request.httpBody = jsonData
-                }
+                // Execute request using injected executor
+                let (data, response) = try await requestExecutor.execute(request)
                 
-                let (data, response) = try await session.data(for: request)
+                // Parse response using injected parser
+                let result = try await responseParser.parse(data, response: response, as: responseType)
                 
-                // Check HTTP status
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw IAPError.networkError
-                }
-                
-                guard 200...299 ~= httpResponse.statusCode else {
-                    throw mapHTTPError(statusCode: httpResponse.statusCode, data: data)
-                }
-                
-                // Parse response
-                if T.self == EmptyResponse.self {
-                    await retryManager.resetAttempts(for: operationName)
-                    return EmptyResponse() as! T
-                } else {
-                    let decoder = JSONDecoder()
-                    decoder.dateDecodingStrategy = .iso8601
-                    let result = try decoder.decode(T.self, from: data)
-                    await retryManager.resetAttempts(for: operationName)
-                    return result
-                }
+                await retryManager.resetAttempts(for: operationName)
+                return result
                 
             } catch {
                 lastError = error
@@ -189,25 +278,7 @@ final class NetworkClient: Sendable {
         throw lastError ?? IAPError.networkError
     }
     
-    /// Maps HTTP status codes to appropriate IAP errors
-    private func mapHTTPError(statusCode: Int, data: Data) -> IAPError {
-        switch statusCode {
-        case 400:
-            return .orderCreationFailed(underlying: "Bad request")
-        case 404:
-            return .orderNotFound
-        case 409:
-            return .orderAlreadyCompleted
-        case 410:
-            return .orderExpired
-        case 422:
-            return .orderValidationFailed
-        case 500...599:
-            return .networkError
-        default:
-            return .networkError
-        }
-    }
+
     
     /// Determines if an error should trigger a retry
     private func shouldRetryError(_ error: Error) -> Bool {
@@ -235,9 +306,42 @@ final class NetworkClient: Sendable {
     }
 }
 
-// MARK: - Helper Types
+// MARK: - Factory Methods
 
-/// Empty response for operations that don't return data
-private struct EmptyResponse: Codable, Sendable {
-    init() {}
+// MARK: - Public Factory Methods
+
+extension NetworkClient {
+    /// Creates a NetworkClient with default configuration
+    /// - Parameter configuration: Network configuration with base URL and settings
+    /// - Returns: Configured NetworkClient instance
+    public static func `default`(configuration: NetworkConfiguration) -> NetworkClient {
+        return NetworkClient(configuration: configuration)
+    }
+    
+    /// Creates a NetworkClient with custom components for advanced use cases
+    /// - Parameters:
+    ///   - baseURL: Base URL for all requests
+    ///   - retryManager: Custom retry manager (optional)
+    ///   - requestExecutor: Custom request executor
+    ///   - responseParser: Custom response parser
+    ///   - requestBuilder: Custom request builder
+    ///   - endpointBuilder: Custom endpoint builder (optional)
+    /// - Returns: NetworkClient with custom components
+    public static func custom(
+        baseURL: URL,
+        retryManager: RetryManager = RetryManager(),
+        requestExecutor: NetworkRequestExecutor,
+        responseParser: NetworkResponseParser,
+        requestBuilder: NetworkRequestBuilder,
+        endpointBuilder: NetworkEndpointBuilder? = nil
+    ) -> NetworkClient {
+        return NetworkClient(
+            baseURL: baseURL,
+            retryManager: retryManager,
+            requestExecutor: requestExecutor,
+            responseParser: responseParser,
+            requestBuilder: requestBuilder,
+            endpointBuilder: endpointBuilder
+        )
+    }
 }

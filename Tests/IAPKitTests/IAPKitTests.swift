@@ -310,7 +310,8 @@ func testTransactionStateValidation() {
 
 @Test("IAPConfiguration Default Values")
 func testIAPConfigurationDefaultValues() {
-    let defaultConfig = IAPConfiguration.default
+    let testURL = URL(string: "https://test.example.com")!
+    let defaultConfig = IAPConfiguration.default(networkBaseURL: testURL)
     
     #expect(defaultConfig.enableDebugLogging == false)
     #expect(defaultConfig.autoFinishTransactions == true)
@@ -319,8 +320,11 @@ func testIAPConfigurationDefaultValues() {
     
     // Test receipt validation config
     let receiptConfig = defaultConfig.receiptValidation
-    #expect(receiptConfig.mode == .local)
+    #expect(receiptConfig.mode == ReceiptValidationConfiguration.ValidationMode.local)
     #expect(receiptConfig.timeout == 30)
+    
+    // Test network configuration
+    #expect(defaultConfig.networkConfiguration.baseURL == testURL)
 }
 
 @Test("IAPConfiguration Custom Values")
@@ -330,19 +334,21 @@ func testIAPConfigurationCustomValues() {
         timeout: 60
     )
     
+    let testURL = URL(string: "https://custom.example.com")!
     let customConfig = IAPConfiguration(
         enableDebugLogging: true,
         autoFinishTransactions: false,
         productCacheExpiration: 600,
         autoRecoverTransactions: false,
-        receiptValidation: customReceiptConfig
+        receiptValidation: customReceiptConfig,
+        networkConfiguration: .default(baseURL: testURL)
     )
     
     #expect(customConfig.enableDebugLogging == true)
     #expect(customConfig.autoFinishTransactions == false)
     #expect(customConfig.autoRecoverTransactions == false)
     #expect(customConfig.productCacheExpiration == 600)
-    #expect(customConfig.receiptValidation.mode == .remote)
+    #expect(customConfig.receiptValidation.mode == ReceiptValidationConfiguration.ValidationMode.remote)
     #expect(customConfig.receiptValidation.timeout == 60)
 }
 

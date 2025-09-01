@@ -398,6 +398,66 @@ let customValidator = CustomReceiptValidator()
 let manager = IAPManager(configuration: config, receiptValidator: customValidator)
 ```
 
+### Network Customization
+
+IAPKit provides flexible network layer customization for advanced use cases:
+
+```swift
+// Basic network configuration
+let networkConfig = NetworkConfiguration(
+    baseURL: URL(string: "https://your-api.com")!,
+    timeout: 30.0,
+    maxRetryAttempts: 3
+)
+
+let config = IAPConfiguration(
+    networkConfiguration: networkConfig
+)
+```
+
+#### Custom Authentication
+
+```swift
+// Add authentication to all requests
+let authConfig = NetworkConfiguration.withAuthentication(
+    baseURL: URL(string: "https://secure-api.com")!,
+    authTokenProvider: {
+        return await AuthService.shared.getToken()
+    }
+)
+
+let config = IAPConfiguration(networkConfiguration: authConfig)
+```
+
+#### Custom Request/Response Processing
+
+```swift
+// Custom request builder with encryption
+let secureBuilder = SecureNetworkRequestBuilder(
+    additionalHeaders: ["X-API-Key": "your-key"],
+    encryptBody: { data in
+        return try await CryptoService.encrypt(data)
+    }
+)
+
+// Custom response parser with validation
+let validatingParser = ValidatingNetworkResponseParser { data, response in
+    try await validateResponseSignature(data, response)
+}
+
+let customComponents = NetworkCustomComponents(
+    requestBuilder: secureBuilder,
+    responseParser: validatingParser
+)
+
+let networkConfig = NetworkConfiguration(
+    baseURL: URL(string: "https://api.com")!,
+    customComponents: customComponents
+)
+```
+
+For detailed network customization guide, see [Network Customization Guide](docs/NETWORK_CUSTOMIZATION_GUIDE.md).
+
 ### Order Management
 
 ```swift

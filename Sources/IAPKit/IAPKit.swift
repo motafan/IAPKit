@@ -9,6 +9,7 @@ import Foundation
 /// - 严格的并发检查
 /// - 防丢单机制
 /// - UIKit 和 SwiftUI 兼容
+/// - 独立的网络客户端，可用于框架外部
 /// 
 /// 主要特性：
 /// - 商品加载和管理
@@ -17,8 +18,9 @@ import Foundation
 /// - 收据验证（本地和远程）
 /// - 交易监听和自动重试
 /// - 完整的错误处理和本地化支持
+/// - 可定制的网络客户端，支持外部API集成
 /// 
-/// 使用示例：
+/// 内购使用示例：
 /// ```swift
 /// let manager = IAPManager.shared
 /// 
@@ -30,6 +32,20 @@ import Foundation
 /// 
 /// // 恢复购买
 /// let transactions = try await manager.restorePurchases()
+/// ```
+/// 
+/// 外部网络客户端使用示例：
+/// ```swift
+/// // 创建网络客户端配置
+/// let config = NetworkConfiguration.default(baseURL: URL(string: "https://your-api.com")!)
+/// let networkClient = NetworkClient.default(configuration: config)
+/// 
+/// // 创建订单
+/// let order = IAPOrder.created(id: "order-123", productID: "product-456")
+/// let response = try await networkClient.createOrder(order)
+/// 
+/// // 查询订单状态
+/// let status = try await networkClient.queryOrderStatus(response.serverOrderID)
 /// ```
 public struct IAPKit {
     /// 框架版本号
@@ -45,3 +61,16 @@ public struct IAPKit {
     @available(iOS 15.0, *)
     public static let supportsStoreKit2 = true
 }
+
+// MARK: - Public Exports
+
+// All public types are automatically available when importing IAPKit
+// This file serves as the main entry point for the framework
+
+// Key public types available for external use:
+// - NetworkClient: Standalone HTTP client for order management
+// - NetworkConfiguration: Configuration for network operations
+// - OrderServiceAction: Enum defining supported order operations
+// - IAPOrder, IAPProduct, IAPTransaction: Core data models
+// - RetryManager: Configurable retry logic
+// - All network protocols for customization

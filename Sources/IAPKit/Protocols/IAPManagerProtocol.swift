@@ -133,7 +133,7 @@ public protocol IAPManagerProtocol: Sendable {
      }
      ```
      */
-    func purchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult
+    func purchase(_ product: IAPProduct, userInfo: [String: any Any & Sendable]?) async throws -> IAPPurchaseResult
     
     /**
      恢复用户的历史购买
@@ -352,7 +352,7 @@ public protocol IAPManagerProtocol: Sendable {
      print("Order created: \(order.id), Server ID: \(order.serverOrderID ?? "none")")
      ```
      */
-    func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder
+    func createOrder(for product: IAPProduct, userInfo: [String: any Any & Sendable]?) async throws -> IAPOrder
     
     /**
      查询订单状态

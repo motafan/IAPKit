@@ -30,10 +30,22 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
     // MARK: - Call Tracking
     
     /// 调用计数器
-    public private(set) var callCounts: [String: Int] = [:]
+    private let callCountsLock = NSLock()
+    private var _callCounts: [String: Int] = [:]
+    public var callCounts: [String: Int] {
+        callCountsLock.lock()
+        defer { callCountsLock.unlock() }
+        return _callCounts
+    }
     
     /// 调用参数记录
-    public private(set) var callParameters: [String: Any] = [:]
+    private let callParametersLock = NSLock()
+    private var _callParameters: [String: Any] = [:]
+    public var callParameters: [String: Any] {
+        callParametersLock.lock()
+        defer { callParametersLock.unlock() }
+        return _callParameters
+    }
     
     /// 交易观察者是否活跃
     public private(set) var isTransactionObserverActive: Bool = false
@@ -52,7 +64,7 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
     
     public func loadProducts(productIDs: Set<String>) async throws -> [IAPProduct] {
         incrementCallCount(for: "loadProducts")
-        callParameters["loadProducts_productIDs"] = productIDs
+        setCallParameter("loadProducts_productIDs", value: productIDs)
         
         if mockDelay > 0 {
             try await Task.sleep(nanoseconds: UInt64(mockDelay * 1_000_000_000))
@@ -69,7 +81,7 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
     
     public func purchase(_ product: IAPProduct) async throws -> IAPPurchaseResult {
         incrementCallCount(for: "purchase")
-        callParameters["purchase_product"] = product
+        setCallParameter("purchase_product", value: product)
         
         if mockDelay > 0 {
             try await Task.sleep(nanoseconds: UInt64(mockDelay * 1_000_000_000))
@@ -126,7 +138,7 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
     
     public func finishTransaction(_ transaction: IAPTransaction) async throws {
         incrementCallCount(for: "finishTransaction")
-        callParameters["finishTransaction_transaction"] = transaction
+        setCallParameter("finishTransaction_transaction", value: transaction)
         
         if mockDelay > 0 {
             try await Task.sleep(nanoseconds: UInt64(mockDelay * 1_000_000_000))
@@ -234,8 +246,15 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
         mockError = nil
         shouldThrowError = false
         mockDelay = 0
-        callCounts.removeAll()
-        callParameters.removeAll()
+        
+        callCountsLock.lock()
+        _callCounts.removeAll()
+        callCountsLock.unlock()
+        
+        callParametersLock.lock()
+        _callParameters.removeAll()
+        callParametersLock.unlock()
+        
         isTransactionObserverActive = false
         transactionUpdateHandler = nil
         orderTransactionMapping.removeAll()
@@ -245,14 +264,18 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
     /// - Parameter method: 方法名
     /// - Returns: 调用次数
     public func getCallCount(for method: String) -> Int {
-        return callCounts[method] ?? 0
+        callCountsLock.lock()
+        defer { callCountsLock.unlock() }
+        return _callCounts[method] ?? 0
     }
     
     /// 获取方法调用参数
     /// - Parameter method: 方法名
     /// - Returns: 调用参数
     public func getCallParameters(for method: String) -> Any? {
-        return callParameters[method]
+        callParametersLock.lock()
+        defer { callParametersLock.unlock() }
+        return _callParameters[method]
     }
     
     /// 检查方法是否被调用
@@ -265,19 +288,31 @@ public final class MockStoreKitAdapter: StoreKitAdapterProtocol, @unchecked Send
     /// 获取所有调用的方法名
     /// - Returns: 方法名列表
     public func getAllCalledMethods() -> [String] {
-        return Array(callCounts.keys)
+        callCountsLock.lock()
+        defer { callCountsLock.unlock() }
+        return Array(_callCounts.keys)
     }
     
     /// 获取调用统计信息
     /// - Returns: 调用统计
     public func getCallStatistics() -> [String: Int] {
-        return callCounts
+        callCountsLock.lock()
+        defer { callCountsLock.unlock() }
+        return _callCounts
     }
     
     // MARK: - Private Methods
     
     private func incrementCallCount(for method: String) {
-        callCounts[method, default: 0] += 1
+        callCountsLock.lock()
+        defer { callCountsLock.unlock() }
+        _callCounts[method, default: 0] += 1
+    }
+    
+    private func setCallParameter(_ key: String, value: Any) {
+        callParametersLock.lock()
+        defer { callParametersLock.unlock() }
+        _callParameters[key] = value
     }
 }
 

@@ -20,7 +20,7 @@ public protocol OrderServiceProtocol: Sendable {
     ///   - userInfo: Optional additional information to associate with the order
     /// - Returns: The created order with server-assigned identifier
     /// - Throws: IAPError if order creation fails
-    func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder
+    func createOrder(for product: IAPProduct, userInfo: [String: any Any & Sendable]?) async throws -> IAPOrder
     
     /// Queries the current status of an order
     /// - Parameter orderID: The unique identifier of the order

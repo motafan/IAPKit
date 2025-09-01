@@ -224,7 +224,7 @@ func testProductTypeClassificationCore() {
 
 @Test("配置默认值验证")
 func testConfigurationDefaultValues() {
-    let defaultConfig = IAPConfiguration.default
+    let defaultConfig = IAPConfiguration.default(networkBaseURL: URL(string: "https://test.example.com")!)
     
     #expect(defaultConfig.enableDebugLogging == false)
     #expect(defaultConfig.autoFinishTransactions == true)
@@ -249,7 +249,8 @@ func testCustomConfigurationCreation() {
         autoFinishTransactions: false,
         productCacheExpiration: 600,
         autoRecoverTransactions: false,
-        receiptValidation: customReceiptConfig
+        receiptValidation: customReceiptConfig,
+        networkConfiguration: NetworkConfiguration(baseURL: URL(string: "https://custom.example.com")!)
     )
     
     #expect(customConfig.enableDebugLogging == true)

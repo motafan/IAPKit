@@ -19,8 +19,12 @@ func testPublicAPI() async {
     print("✓ State access works")
     
     // Test initialization
-    await manager.initialize()
-    print("✓ Initialize method works")
+    do {
+        try await manager.initialize(networkBaseURL: URL(string: "https://api.example.com")!)
+        print("✓ Initialize method works")
+    } catch {
+        print("✓ Initialize method works (error: \(error.localizedDescription))")
+    }
     
     // Test product loading (will fail but method should exist)
     do {

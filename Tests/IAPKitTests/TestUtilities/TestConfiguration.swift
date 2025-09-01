@@ -87,16 +87,24 @@ public struct TestConfiguration: Sendable {
     // MARK: - Conversion Methods
     
     /// 转换为 IAPConfiguration
+    /// - Parameter networkBaseURL: 网络基础 URL，默认为测试 URL
     /// - Returns: IAPConfiguration 实例
-    public func toIAPConfiguration() -> IAPConfiguration {
+    public func toIAPConfiguration(networkBaseURL: URL = URL(string: "https://test.example.com")!) -> IAPConfiguration {
         return IAPConfiguration(
             enableDebugLogging: enableDebugLogging,
             autoFinishTransactions: autoFinishTransactions,
             maxRetryAttempts: maxRetryAttempts,
             productCacheExpiration: productCacheExpiration,
             autoRecoverTransactions: autoRecoverTransactions,
-            receiptValidation: receiptValidation
+            receiptValidation: receiptValidation,
+            networkConfiguration: .default(baseURL: networkBaseURL)
         )
+    }
+    
+    /// 创建默认的测试 IAPConfiguration
+    /// - Returns: 用于测试的默认 IAPConfiguration
+    public static func defaultIAPConfiguration() -> IAPConfiguration {
+        return TestConfiguration.default.toIAPConfiguration()
     }
     
     // MARK: - Builder Methods

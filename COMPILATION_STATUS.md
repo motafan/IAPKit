@@ -179,3 +179,44 @@ swift test
 6. **未使用变量警告** - 替换为下划线或修复逻辑
 
 项目现在可以正常编译和运行测试。
+
+## 网络配置架构调整
+
+✅ **网络配置架构已优化**
+
+### 主要改进
+
+1. **外部 URL 配置**: 移除了硬编码的默认 URL，要求用户提供网络基础 URL
+   - `NetworkConfiguration.default(baseURL: URL)` - 需要提供基础 URL
+   - `IAPConfiguration.default(networkBaseURL: URL)` - 需要提供网络基础 URL
+
+2. **IAPManager 配置方法**: 添加了 `configure(networkBaseURL:)` 方法
+   - 必须在 `initialize()` 之前调用
+   - 允许动态设置网络配置
+   - 重新创建相关服务组件
+
+3. **测试工具改进**: 
+   - `TestConfiguration.defaultIAPConfiguration()` - 提供测试用的默认配置
+   - 所有测试使用统一的测试 URL
+
+4. **Sendable 兼容性**: 修复了网络测试中的 Mock 类的 Sendable 问题
+   - 使用 `@unchecked Sendable` 和锁机制确保线程安全
+
+### 使用示例
+
+```swift
+// 配置网络基础 URL
+IAPManager.shared.configure(networkBaseURL: URL(string: "https://your-api.com")!)
+
+// 初始化框架
+await IAPManager.shared.initialize()
+```
+
+### 架构优势
+
+- **更安全**: 避免了硬编码的占位符 URL
+- **更灵活**: 支持不同环境的 URL 配置
+- **更清晰**: 明确要求用户提供网络配置
+- **更可测试**: 测试环境有独立的配置管理
+
+项目现在可以正常编译和运行测试。

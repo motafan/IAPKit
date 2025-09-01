@@ -62,7 +62,7 @@ public final class MockOrderService: OrderServiceProtocol, @unchecked Sendable {
     
     // MARK: - OrderServiceProtocol Implementation
     
-    public func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder {
+    public func createOrder(for product: IAPProduct, userInfo: [String: any Any & Sendable]?) async throws -> IAPOrder {
         incrementCallCount(for: "createOrder")
         callParameters["createOrder_product"] = product
         callParameters["createOrder_userInfo"] = userInfo
@@ -84,7 +84,7 @@ public final class MockOrderService: OrderServiceProtocol, @unchecked Sendable {
         
         let expiresAt = autoExpireOrders ? Date().addingTimeInterval(mockOrderExpirationTime) : nil
         
-        // Convert [String: Any] to [String: String] for userInfo
+        // Convert [String: any Any & Sendable] to [String: String] for userInfo
         let stringUserInfo: [String: String]?
         if let userInfo = userInfo {
             stringUserInfo = userInfo.compactMapValues { value in
@@ -520,7 +520,7 @@ extension MockOrderService {
     @discardableResult
     public func configureSuccessfulOrderFlow(
         for product: IAPProduct,
-        userInfo: [String: Any]? = nil
+        userInfo: [String: any Any & Sendable]? = nil
     ) -> IAPOrder {
         let order = IAPOrder(
             id: UUID().uuidString,

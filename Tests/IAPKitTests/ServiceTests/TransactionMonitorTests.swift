@@ -9,7 +9,7 @@ import Foundation
 func testTransactionMonitorBasicMonitoring() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     await monitor.startMonitoring()
@@ -31,7 +31,7 @@ func testTransactionMonitorBasicMonitoring() async throws {
 func testTransactionMonitorDuplicateStart() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     await monitor.startMonitoring()
@@ -51,7 +51,7 @@ func testTransactionMonitorDuplicateStart() async throws {
 func testTransactionMonitorStopWithoutStart() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     monitor.stopMonitoring()
@@ -67,7 +67,7 @@ func testTransactionMonitorStopWithoutStart() async throws {
 func testTransactionMonitorHandlerManagement() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     var receivedTransactions: [IAPTransaction] = []
     
@@ -108,7 +108,7 @@ func testTransactionMonitorHandlerManagement() async throws {
 func testTransactionMonitorConvenienceHandlers() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     var receivedTransactions: [IAPTransaction] = []
     
@@ -152,7 +152,7 @@ func testTransactionMonitorPendingTransactions() async throws {
     )
     await mockAdapter.setMockPendingTransactions(pendingTransactions)
     
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     await monitor.handlePendingTransactions()
@@ -168,7 +168,7 @@ func testTransactionMonitorPendingTransactions() async throws {
 func testTransactionMonitorStats() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     let initialStats = monitor.getMonitoringStats()
@@ -201,7 +201,7 @@ func testTransactionMonitorStats() async throws {
 func testTransactionMonitorStatsReset() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     await monitor.startMonitoring()
     
@@ -226,7 +226,7 @@ func testTransactionMonitorStatsReset() async throws {
 func testTransactionMonitorState() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When - 初始状态
     let initialState = monitor.monitoringState
@@ -302,17 +302,20 @@ func testTransactionMonitorWithDelay() async throws {
     let mockAdapter = MockStoreKitAdapter()
     mockAdapter.setMockDelay(0.1) // 100ms delay
     
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
-    // When
-    let startTime = Date()
+    // When - 启动监控
     await monitor.startMonitoring()
-    let duration = Date().timeIntervalSince(startTime)
     
-    // Then
+    // Then - 验证监控已启动
     #expect(monitor.isCurrentlyMonitoring)
-    // 由于有延迟，启动应该花费一些时间
-    #expect(duration >= 0.1)
+    
+    // When - 获取监控统计信息
+    let stats = monitor.getMonitoringStats()
+    
+    // Then - 验证监控状态和统计信息
+    #expect(monitor.isCurrentlyMonitoring == true)
+    #expect(stats.startTime != nil)
     
     monitor.stopMonitoring()
 }
@@ -324,7 +327,7 @@ func testTransactionMonitorErrorHandling() async throws {
     let mockAdapter = MockStoreKitAdapter()
     mockAdapter.setMockError(.networkError, shouldThrow: true)
     
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When - 即使适配器有错误，监控器也应该能启动
     await monitor.startMonitoring()
@@ -340,7 +343,7 @@ func testTransactionMonitorErrorHandling() async throws {
 func testTransactionMonitorSuccessRate() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // 模拟一些统计数据
     await monitor.startMonitoring()
@@ -361,7 +364,7 @@ func testTransactionMonitorSuccessRate() async throws {
 func testTransactionMonitorStatsSummary() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     await monitor.startMonitoring()

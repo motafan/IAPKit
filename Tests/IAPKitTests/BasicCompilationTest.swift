@@ -16,10 +16,11 @@ func testBasicCompilation() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // Then - 验证服务创建成功
     
@@ -47,7 +48,7 @@ func testMockObjects() async throws {
     mockOrderService.addMockOrder(testOrder)
     
     // Then - 验证 Mock 配置
-    #expect(mockAdapter.wasCalled("setMockProducts"))
+    #expect(mockAdapter.mockProducts.count == 2)
     #expect(mockOrderService.getOrder(testOrder.id) != nil)
     #expect(mockValidator.wasCalled("") == false) // 还未调用验证
 }

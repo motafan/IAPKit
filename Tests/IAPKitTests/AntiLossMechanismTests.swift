@@ -6,8 +6,15 @@ import Testing
 
 @Test("重试管理器 - 基本重试逻辑")
 func testRetryManagerBasicRetry() async throws {
-    // Given
-    let retryManager = RetryManager()
+    // Given - 使用无延迟配置进行测试
+    let config = RetryConfiguration(
+        maxRetries: 3,
+        baseDelay: 0.0,  // 无延迟
+        maxDelay: 0.0,
+        backoffMultiplier: 1.0,
+        strategy: .fixed
+    )
+    let retryManager = RetryManager(configuration: config)
     let operationId = "test_operation"
     
     // When - 第一次尝试
@@ -27,10 +34,10 @@ func testRetryManagerBasicRetry() async throws {
         await retryManager.recordAttempt(for: operationId)
     }
     
-    // When - 超过最大重试次数
+    // When - 超过最大重试次数（已经尝试了3次，达到maxRetries=3）
     let shouldRetryAfterMax = await retryManager.shouldRetry(for: operationId)
     
-    // Then
+    // Then - 不应该再重试
     #expect(shouldRetryAfterMax == false)
     
     let finalRecord = await retryManager.getRecord(for: operationId)
@@ -109,8 +116,15 @@ func testRetryManagerRecordCleanup() async throws {
 
 @Test("重试管理器 - 带重试的操作执行")
 func testRetryManagerExecuteWithRetry() async throws {
-    // Given
-    let retryManager = RetryManager()
+    // Given - 使用无延迟配置进行测试
+    let config = RetryConfiguration(
+        maxRetries: 3,
+        baseDelay: 0.0,
+        maxDelay: 0.0,
+        backoffMultiplier: 1.0,
+        strategy: .fixed
+    )
+    let retryManager = RetryManager(configuration: config)
     
     // 使用actor来安全地管理计数器
     actor AttemptCounter {
@@ -151,7 +165,7 @@ func testRetryManagerExecuteWithRetry() async throws {
 func testAntiLossTransactionMonitorBasicMonitoring() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // 设置未完成的交易
     let pendingTransactions = [
@@ -178,7 +192,7 @@ func testAntiLossTransactionMonitorBasicMonitoring() async throws {
 func testAntiLossTransactionMonitorHandlerManagement() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     var callCount = 0
     
@@ -220,12 +234,13 @@ func testTransactionRecoveryManagerBasicFunctionality() async throws {
     let mockAdapter = MockStoreKitAdapter()
     let mockOrderService = MockOrderService()
     let mockCache = IAPCache(productCacheExpiration: 3600)
-    let configuration = IAPConfiguration.default
+    let configuration = IAPConfiguration.default(networkBaseURL: URL(string: "https://test.example.com")!)
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
         cache: mockCache,
-        configuration: configuration
+        configuration: configuration,
+        stateManager: IAPState()
     )
     
     // 设置未完成的交易
@@ -261,7 +276,9 @@ func testTransactionRecoveryManagerEmptyQueue() async throws {
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
-        cache: mockCache
+        cache: mockCache,
+        configuration: TestConfiguration.defaultIAPConfiguration(),
+        stateManager: IAPState()
     )
     
     // 设置空的未完成交易队列
@@ -292,7 +309,9 @@ func testNetworkInterruptionScenario() async throws {
     let recoveryManager = TransactionRecoveryManager(
         adapter: mockAdapter,
         orderService: mockOrderService,
-        cache: mockCache
+        cache: mockCache,
+        configuration: TestConfiguration.defaultIAPConfiguration(),
+        stateManager: IAPState()
     )
     
     // 模拟网络中断导致的未完成交易
@@ -322,7 +341,7 @@ func testNetworkInterruptionScenario() async throws {
 func testAppCrashRecoveryScenario() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let monitor = TransactionMonitor(adapter: mockAdapter)
+    let monitor = TransactionMonitor(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // 模拟应用崩溃前的状态 - 有多个进行中的交易
     let crashedTransactions = [

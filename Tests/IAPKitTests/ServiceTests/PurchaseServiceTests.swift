@@ -20,7 +20,8 @@ func testPurchaseServiceBasicPurchase() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
@@ -29,7 +30,7 @@ func testPurchaseServiceBasicPurchase() async throws {
     // Then
     let verification = TestStateVerifier.verifyPurchaseResult(result, expectedType: .success)
     #expect(verification.isValid, Comment(rawValue: verification.summary))
-    #expect(await mockAdapter.wasCalled("purchase"))
+    #expect(mockAdapter.wasCalled("purchase"))
 }
 
 @MainActor
@@ -39,13 +40,15 @@ func testPurchaseServiceCancelledPurchase() async throws {
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator.alwaysValid()
     let mockOrderService = MockOrderService.alwaysSucceeds()
-    mockAdapter.setMockPurchaseResult(.cancelled(nil))
     
     let testProduct = TestDataGenerator.generateProduct()
+    let testOrder = TestDataGenerator.generateOrder(productID: testProduct.id)
+    mockAdapter.setMockPurchaseResult(.cancelled(testOrder))
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
@@ -69,7 +72,8 @@ func testPurchaseServiceFailedPurchase() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When & Then
@@ -94,7 +98,8 @@ func testPurchaseServiceDuplicatePurchaseDetection() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
@@ -131,7 +136,8 @@ func testPurchaseServiceRestorePurchases() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
@@ -143,7 +149,7 @@ func testPurchaseServiceRestorePurchases() async throws {
         expectedCount: 3
     )
     #expect(verification.isValid, Comment(rawValue: verification.summary))
-    #expect(await mockAdapter.wasCalled("restorePurchases"))
+    #expect(mockAdapter.wasCalled("restorePurchases"))
 }
 
 @MainActor
@@ -158,7 +164,8 @@ func testPurchaseServiceEmptyRestoreResult() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
@@ -166,7 +173,7 @@ func testPurchaseServiceEmptyRestoreResult() async throws {
     
     // Then
     #expect(result.isEmpty)
-    #expect(await mockAdapter.wasCalled("restorePurchases"))
+    #expect(mockAdapter.wasCalled("restorePurchases"))
 }
 
 @MainActor
@@ -181,14 +188,15 @@ func testPurchaseServiceFinishTransaction() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
     try await purchaseService.finishTransaction(testTransaction)
     
     // Then
-    #expect(await mockAdapter.wasCalled("finishTransaction"))
+    #expect(mockAdapter.wasCalled("finishTransaction"))
     let callCount = mockAdapter.getCallCount(for: "finishTransaction")
     #expect(callCount == 1)
 }
@@ -208,7 +216,8 @@ func testPurchaseServiceReceiptValidation() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
@@ -220,7 +229,7 @@ func testPurchaseServiceReceiptValidation() async throws {
         expectedValidity: true
     )
     #expect(verification.isValid, Comment(rawValue: verification.summary))
-    #expect(await mockValidator.wasCalled("validateReceipt"))
+    #expect(mockValidator.wasCalled("validateReceipt"))
 }
 
 @MainActor
@@ -235,7 +244,8 @@ func testPurchaseServiceReceiptValidationFailure() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
@@ -257,7 +267,8 @@ func testPurchaseServiceActivePurchaseManagement() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When - 初始状态
@@ -291,7 +302,8 @@ func testPurchaseServicePurchaseStats() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
@@ -315,7 +327,8 @@ func testPurchaseServicePurchaseValidation() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
@@ -349,7 +362,8 @@ func testPurchaseServiceInvalidProductValidation() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When
@@ -373,7 +387,8 @@ func testPurchaseServiceNetworkErrorHandling() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When & Then
@@ -439,7 +454,8 @@ func testPurchaseServiceWithDelay() async throws {
     let purchaseService = PurchaseService(
         adapter: mockAdapter,
         receiptValidator: mockValidator,
-        orderService: mockOrderService
+        orderService: mockOrderService,
+        configuration: TestConfiguration.defaultIAPConfiguration()
     )
     
     // When

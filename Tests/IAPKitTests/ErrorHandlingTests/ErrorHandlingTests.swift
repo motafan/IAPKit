@@ -184,7 +184,7 @@ func testErrorHandlingRecoverySuggestions() async throws {
 func testErrorHandlingServiceLayerErrorHandling() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     let testErrors: [IAPError] = [
         .networkError,
@@ -216,7 +216,7 @@ func testErrorHandlingPurchaseServiceErrorHandling() async throws {
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator()
     let mockOrderService = MockOrderService()
-    let purchaseService = PurchaseService(adapter: mockAdapter, receiptValidator: mockValidator, orderService: mockOrderService)
+    let purchaseService = PurchaseService(adapter: mockAdapter, receiptValidator: mockValidator, orderService: mockOrderService, configuration: TestConfiguration.defaultIAPConfiguration())
     
     let testProduct = TestDataGenerator.generateProduct()
     
@@ -281,7 +281,7 @@ func testErrorHandlingErrorChainPropagation() async throws {
     let mockAdapter = MockStoreKitAdapter()
     let mockValidator = MockReceiptValidator()
     let mockOrderService = MockOrderService()
-    let purchaseService = PurchaseService(adapter: mockAdapter, receiptValidator: mockValidator, orderService: mockOrderService)
+    let purchaseService = PurchaseService(adapter: mockAdapter, receiptValidator: mockValidator, orderService: mockOrderService, configuration: TestConfiguration.defaultIAPConfiguration())
     
     let testProduct = TestDataGenerator.generateProduct()
     let originalError = IAPError.networkError
@@ -384,7 +384,7 @@ func testErrorHandlingPerformance() async throws {
 func testErrorHandlingRecoveryStrategies() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // 模拟网络错误后恢复
     mockAdapter.setMockError(.networkError, shouldThrow: true)
@@ -415,7 +415,7 @@ func testErrorHandlingRecoveryStrategies() async throws {
 func testErrorHandlingConcurrentErrorHandling() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     mockAdapter.setMockError(.networkError, shouldThrow: true)
     
     let taskCount = 10

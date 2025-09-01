@@ -113,7 +113,7 @@ public final class ProductService: Sendable {
     ///   - configuration: 配置信息
     public init(
         adapter: StoreKitAdapterProtocol,
-        configuration: IAPConfiguration = .default
+        configuration: IAPConfiguration
     ) {
         self.adapter = adapter
         self.configuration = configuration

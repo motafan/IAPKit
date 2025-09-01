@@ -32,7 +32,7 @@ public final class PurchaseService: Sendable {
         adapter: StoreKitAdapterProtocol,
         receiptValidator: ReceiptValidatorProtocol,
         orderService: OrderServiceProtocol,
-        configuration: IAPConfiguration = .default
+        configuration: IAPConfiguration
     ) {
         self.adapter = adapter
         self.receiptValidator = receiptValidator
@@ -50,7 +50,7 @@ public final class PurchaseService: Sendable {
     ///   - userInfo: 可选的用户信息，将与订单关联
     /// - Returns: 购买结果
     /// - Throws: IAPError 相关错误
-    public func purchase(_ product: IAPProduct, userInfo: [String: Any]? = nil) async throws -> IAPPurchaseResult {
+    public func purchase(_ product: IAPProduct, userInfo: [String: any Any & Sendable]? = nil) async throws -> IAPPurchaseResult {
         IAPLogger.debug("PurchaseService: Starting purchase for product \(product.id)")
         
         // 检查是否已有相同商品的购买在进行中
@@ -284,7 +284,7 @@ public final class PurchaseService: Sendable {
     ///   - userInfo: 可选的用户信息，将与订单关联
     /// - Returns: 购买结果
     /// - Throws: IAPError 相关错误
-    private func executeOrderBasedPurchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult {
+    private func executeOrderBasedPurchase(_ product: IAPProduct, userInfo: [String: any Any & Sendable]?) async throws -> IAPPurchaseResult {
         IAPLogger.debug("PurchaseService: Starting order-based purchase for product \(product.id)")
         
         do {
@@ -309,7 +309,7 @@ public final class PurchaseService: Sendable {
     ///   - userInfo: 可选的用户信息，将与订单关联
     /// - Returns: 创建的订单和交易信息的元组
     /// - Throws: IAPError 相关错误
-    private func createOrderAndPurchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> (IAPOrder, IAPTransaction) {
+    private func createOrderAndPurchase(_ product: IAPProduct, userInfo: [String: any Any & Sendable]?) async throws -> (IAPOrder, IAPTransaction) {
         // 1. 创建服务器订单
         let order = try await orderService.createOrder(for: product, userInfo: userInfo)
         IAPLogger.debug("PurchaseService: Order created: \(order.id)")
@@ -332,10 +332,23 @@ public final class PurchaseService: Sendable {
                 IAPLogger.info("PurchaseService: StoreKit purchase pending for order \(order.id)")
                 return (pendingOrder, transaction)
                 
-            case .cancelled(_):
-                IAPLogger.info("PurchaseService: StoreKit purchase cancelled for order \(order.id)")
-                await handlePurchaseFailure(IAPError.purchaseCancelled, order: pendingOrder)
-                throw IAPError.purchaseCancelled
+            case .cancelled(let order):
+                IAPLogger.info("PurchaseService: StoreKit purchase cancelled for order \(order?.id ?? "unknown")")
+                // 购买取消不应该被视为错误，而是一种正常的结果状态
+                // 更新订单状态为取消
+                try await orderService.updateOrderStatus(pendingOrder.id, status: .cancelled)
+                let cancelledOrder = pendingOrder.withStatus(.cancelled)
+                
+                // 创建一个表示取消的交易
+                let cancelledTransaction = IAPTransaction(
+                    id: "cancelled_\(UUID().uuidString)",
+                    productID: product.id,
+                    purchaseDate: Date(),
+                    transactionState: .failed(IAPError.purchaseCancelled)
+                )
+                
+                // 返回取消结果而不是抛出错误
+                return (cancelledOrder, cancelledTransaction)
                 
             case .failed(let error, _):
                 IAPLogger.info("PurchaseService: StoreKit purchase failed for order \(order.id): \(error)")
@@ -437,8 +450,16 @@ public final class PurchaseService: Sendable {
             
         case .failed(let error):
             IAPLogger.info("PurchaseService: Transaction failed for order \(order.id): \(error)")
-            await handlePurchaseFailure(error, order: order)
-            return .failed(error, order)
+            
+            // 特殊处理购买取消的情况
+            if case .purchaseCancelled = error {
+                IAPLogger.info("PurchaseService: Purchase was cancelled for order \(order.id)")
+                // 订单状态已经在 createOrderAndPurchase 中更新为 cancelled
+                return .cancelled(order)
+            } else {
+                await handlePurchaseFailure(error, order: order)
+                return .failed(error, order)
+            }
             
         case .restored:
             // 恢复的交易标记订单为完成状态
@@ -653,7 +674,7 @@ public final class PurchaseService: Sendable {
     ///   - userInfo: 可选的用户信息，将与订单关联
     /// - Returns: 购买结果
     /// - Throws: IAPError 相关错误
-    private func performPurchase(_ product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPPurchaseResult {
+    private func performPurchase(_ product: IAPProduct, userInfo: [String: any Any & Sendable]?) async throws -> IAPPurchaseResult {
         // 使用新的基于订单的购买流程
         return try await executeOrderBasedPurchase(product, userInfo: userInfo)
     }

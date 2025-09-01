@@ -34,7 +34,7 @@ public struct IAPConfiguration: Sendable {
         productCacheExpiration: TimeInterval = 300, // 5 minutes
         autoRecoverTransactions: Bool = true,
         receiptValidation: ReceiptValidationConfiguration = .default,
-        networkConfiguration: NetworkConfiguration = .default
+        networkConfiguration: NetworkConfiguration
     ) {
         self.enableDebugLogging = enableDebugLogging
         self.autoFinishTransactions = autoFinishTransactions
@@ -45,9 +45,39 @@ public struct IAPConfiguration: Sendable {
         self.receiptValidation = receiptValidation
         self.networkConfiguration = networkConfiguration
     }
+}
+
+// MARK: - IAPConfiguration Extensions
+
+extension IAPConfiguration {
+    /// Creates a default configuration with the specified network base URL
+    /// - Parameter networkBaseURL: The base URL for network requests
+    /// - Returns: An IAPConfiguration with default settings
+    public static func `default`(networkBaseURL: URL) -> IAPConfiguration {
+        return IAPConfiguration(
+            enableDebugLogging: false,
+            autoFinishTransactions: true,
+            maxRetryAttempts: 3,
+            baseRetryDelay: 1.0,
+            productCacheExpiration: 300,
+            autoRecoverTransactions: true,
+            receiptValidation: .default,
+            networkConfiguration: .default(baseURL: networkBaseURL)
+        )
+    }
     
-    /// 默认配置
-    public static let `default` = IAPConfiguration()
+    /// Creates a placeholder configuration for uninitialized instances
+    /// - Returns: An IAPConfiguration with placeholder settings
+    internal static let placeholder = IAPConfiguration(
+        enableDebugLogging: false,
+        autoFinishTransactions: true,
+        maxRetryAttempts: 3,
+        baseRetryDelay: 1.0,
+        productCacheExpiration: 300,
+        autoRecoverTransactions: true,
+        receiptValidation: .default,
+        networkConfiguration: .default(baseURL: URL(string: "https://placeholder.local")!)
+    )
 }
 
 /// 收据验证配置
@@ -148,6 +178,8 @@ public struct ReceiptValidationConfiguration: Sendable {
     }
 }
 
+
+
 /// 购买选项
 public struct IAPPurchaseOptions: Sendable {
     /// 应用账户令牌
@@ -192,18 +224,49 @@ public struct NetworkConfiguration: Sendable {
     /// 重试基础延迟时间（秒）
     public let baseRetryDelay: TimeInterval
     
+    /// 自定义网络组件（可选）
+    public let customComponents: NetworkCustomComponents?
+    
     public init(
-        baseURL: URL = URL(string: "https://api.example.com")!,
+        baseURL: URL,
         timeout: TimeInterval = 30.0,
         maxRetryAttempts: Int = 3,
-        baseRetryDelay: TimeInterval = 1.0
+        baseRetryDelay: TimeInterval = 1.0,
+        customComponents: NetworkCustomComponents? = nil
     ) {
         self.baseURL = baseURL
         self.timeout = timeout
         self.maxRetryAttempts = maxRetryAttempts
         self.baseRetryDelay = baseRetryDelay
+        self.customComponents = customComponents
     }
     
-    /// 默认网络配置
-    public static let `default` = NetworkConfiguration()
+
+}
+
+/// 自定义网络组件配置
+public struct NetworkCustomComponents: Sendable {
+    /// 自定义请求执行器
+    public let requestExecutor: NetworkRequestExecutor?
+    
+    /// 自定义响应解析器
+    public let responseParser: NetworkResponseParser?
+    
+    /// 自定义请求构建器
+    public let requestBuilder: NetworkRequestBuilder?
+    
+    /// 自定义端点构建器
+    public let endpointBuilder: NetworkEndpointBuilder?
+    
+    public init(
+        requestExecutor: NetworkRequestExecutor? = nil,
+        responseParser: NetworkResponseParser? = nil,
+        requestBuilder: NetworkRequestBuilder? = nil,
+        endpointBuilder: NetworkEndpointBuilder? = nil
+    ) {
+        self.requestExecutor = requestExecutor
+        self.responseParser = responseParser
+        self.requestBuilder = requestBuilder
+        self.endpointBuilder = endpointBuilder
+    }
 }

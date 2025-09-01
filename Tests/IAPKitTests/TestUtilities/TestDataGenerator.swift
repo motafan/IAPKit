@@ -373,7 +373,18 @@ public struct TestDataGenerator {
     /// - Parameter size: 数据大小（字节）
     /// - Returns: 收据数据
     public static func generateReceiptData(size: Int = 1024) -> Data {
-        let bytes = (0..<size).map { _ in UInt8.random(in: 0...255) }
+        // 生成符合 PKCS#7 DER 编码格式的测试收据数据
+        var bytes = [UInt8]()
+        
+        // 添加 PKCS#7 DER 编码头部
+        bytes.append(0x30) // SEQUENCE tag
+        bytes.append(0x82) // Long form length (2 bytes follow)
+        
+        // 添加剩余的随机数据
+        let remainingSize = max(0, size - 2)
+        let randomBytes = (0..<remainingSize).map { _ in UInt8.random(in: 0...255) }
+        bytes.append(contentsOf: randomBytes)
+        
         return Data(bytes)
     }
     
@@ -456,7 +467,8 @@ public struct TestDataGenerator {
         return IAPConfiguration(
             enableDebugLogging: enableDebugLogging,
             autoFinishTransactions: autoFinishTransactions,
-            autoRecoverTransactions: autoRecoverTransactions
+            autoRecoverTransactions: autoRecoverTransactions,
+            networkConfiguration: NetworkConfiguration(baseURL: URL(string: "https://test.example.com")!)
         )
     }
     

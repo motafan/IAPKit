@@ -281,6 +281,7 @@ extension MockTransactionRecoveryManager {
     /// 配置待处理订单恢复场景
     /// - Parameter orders: 要恢复的订单
     public func configurePendingOrderRecovery(orders: [IAPOrder]) {
+        mockRecoveredOrders = orders
         var stats = mockRecoveryStats
         stats.ordersRecovered = orders.count
         setMockRecoveryStats(stats)
@@ -291,6 +292,7 @@ extension MockTransactionRecoveryManager {
     ///   - pending: 待处理订单
     ///   - expired: 过期订单
     public func configureMixedRecovery(pending: [IAPOrder], expired: [IAPOrder]) {
+        mockRecoveredOrders = pending
         var stats = mockRecoveryStats
         stats.ordersRecovered = pending.count
         stats.failedPurchasesCleanedUp = expired.count

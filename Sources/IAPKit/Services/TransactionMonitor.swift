@@ -44,7 +44,7 @@ public final class TransactionMonitor: Sendable {
         adapter: StoreKitAdapterProtocol,
         orderService: OrderServiceProtocol? = nil,
         cache: IAPCache? = nil,
-        configuration: IAPConfiguration = .default
+        configuration: IAPConfiguration
     ) {
         self.adapter = adapter
         self.orderService = orderService

@@ -12,7 +12,7 @@ func testProductServiceBasicLoading() async throws {
     let testProducts = TestDataGenerator.generateMixedProducts()
     mockAdapter.setMockProducts(testProducts)
     
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     let productIDs = Set(testProducts.map { $0.id })
     
     // When
@@ -33,7 +33,7 @@ func testProductServiceBasicLoading() async throws {
 func testProductServiceEmptyProductIDs() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     let loadedProducts = try await productService.loadProducts(productIDs: [])
@@ -50,7 +50,7 @@ func testProductServiceNetworkError() async throws {
     let mockAdapter = MockStoreKitAdapter()
     mockAdapter.setMockError(.networkError, shouldThrow: true)
     
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     let productIDs: Set<String> = ["test.product"]
     
     // When & Then
@@ -70,7 +70,7 @@ func testProductServiceGetSingleProduct() async throws {
     let testProduct = TestDataGenerator.generateProduct(id: "test.product")
     mockAdapter.setMockProducts([testProduct])
     
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     let retrievedProduct = await productService.getProduct(by: "test.product")
@@ -85,7 +85,7 @@ func testProductServiceGetSingleProduct() async throws {
 func testProductServiceGetNonexistentProduct() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     let retrievedProduct = await productService.getProduct(by: "nonexistent.product")
@@ -102,7 +102,7 @@ func testProductServicePreloadProducts() async throws {
     let testProducts = TestDataGenerator.generateProducts(count: 3)
     mockAdapter.setMockProducts(testProducts)
     
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     let productIDs = Set(testProducts.map { $0.id })
     
     // When
@@ -122,7 +122,7 @@ func testProductServiceRefreshProducts() async throws {
     let testProducts = TestDataGenerator.generateProducts(count: 2)
     mockAdapter.setMockProducts(testProducts)
     
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     let productIDs = Set(testProducts.map { $0.id })
     
     // When
@@ -138,7 +138,7 @@ func testProductServiceRefreshProducts() async throws {
 func testProductServiceCacheStats() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     let stats = await productService.getCacheStats()
@@ -154,7 +154,7 @@ func testProductServiceCacheStats() async throws {
 func testProductServiceProductIDValidation() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     let validIDs: Set<String> = ["com.app.product1", "com.app.product2"]
     let invalidIDs: Set<String> = ["", ".invalid", "invalid."]
@@ -174,7 +174,7 @@ func testProductServiceProductIDValidation() async throws {
 func testProductServiceProductFiltering() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     let mixedProducts = TestDataGenerator.generateMixedProducts()
     
@@ -192,7 +192,7 @@ func testProductServiceProductFiltering() async throws {
 func testProductServicePriceSorting() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     let products = [
         TestDataGenerator.generateProduct(id: "cheap", price: 0.99),
@@ -216,7 +216,7 @@ func testProductServicePriceSorting() async throws {
 func testProductServiceProductSearch() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     let products = [
         TestDataGenerator.generateProduct(id: "coins.100", displayName: "100 Gold Coins"),
@@ -242,7 +242,7 @@ func testProductServiceProductSearch() async throws {
 func testProductServiceCacheCleaning() async throws {
     // Given
     let mockAdapter = MockStoreKitAdapter()
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     
     // When
     await productService.clearCache()
@@ -263,7 +263,7 @@ func testProductServiceWithDelay() async throws {
     let testProducts = TestDataGenerator.generateProducts(count: 2)
     mockAdapter.setMockProducts(testProducts)
     
-    let productService = ProductService(adapter: mockAdapter)
+    let productService = ProductService(adapter: mockAdapter, configuration: TestConfiguration.defaultIAPConfiguration())
     let productIDs = Set(testProducts.map { $0.id })
     
     // When

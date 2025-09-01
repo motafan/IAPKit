@@ -212,8 +212,11 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
     /// 是否为网络相关错误
     public var isNetworkError: Bool {
         switch self {
-        case .networkError, .timeout, .serverValidationFailed:
+        case .networkError, .timeout:
             return true
+        case .serverValidationFailed(let statusCode):
+            // 5xx 服务器错误被认为是网络错误，4xx 客户端错误不是
+            return statusCode >= 500
         default:
             return false
         }
@@ -222,8 +225,11 @@ public enum IAPError: LocalizedError, Sendable, Equatable {
     /// 是否为可重试的错误
     public var isRetryable: Bool {
         switch self {
-        case .networkError, .timeout, .serverValidationFailed, .transactionProcessingFailed, .orderCreationFailed, .orderValidationFailed, .orderCreationTimeout, .orderValidationTimeout, .orderServerUnavailable:
+        case .networkError, .timeout, .transactionProcessingFailed, .orderCreationFailed, .orderValidationFailed, .orderCreationTimeout, .orderValidationTimeout, .orderServerUnavailable:
             return true
+        case .serverValidationFailed(let statusCode):
+            // 5xx 服务器错误可重试，4xx 客户端错误不可重试
+            return statusCode >= 500
         default:
             return false
         }

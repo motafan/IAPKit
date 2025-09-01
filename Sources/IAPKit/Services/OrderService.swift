@@ -92,8 +92,8 @@ actor OrderCache {
 /// Service implementation for order management
 /// Handles order creation, status tracking, and lifecycle management
 @MainActor
-final class OrderService: OrderServiceProtocol {
-    
+final public class OrderService: OrderServiceProtocol {
+
     // MARK: - Dependencies
     
     private let networkClient: NetworkClient
@@ -102,7 +102,7 @@ final class OrderService: OrderServiceProtocol {
     
     // MARK: - Initialization
     
-    init(networkClient: NetworkClient, retryManager: RetryManager = RetryManager()) {
+    public init(networkClient: NetworkClient, retryManager: RetryManager = RetryManager()) {
         self.networkClient = networkClient
         self.cache = OrderCache()
         self.retryManager = retryManager
@@ -110,7 +110,7 @@ final class OrderService: OrderServiceProtocol {
     
     // MARK: - OrderServiceProtocol Implementation
     
-    func createOrder(for product: IAPProduct, userInfo: [String: Any]?) async throws -> IAPOrder {
+    public func createOrder(for product: IAPProduct, userInfo: [String: any Any & Sendable]?) async throws -> IAPOrder {
         // 1. Create local order record
         let localOrder = createLocalOrder(for: product, userInfo: userInfo)
         
@@ -135,7 +135,7 @@ final class OrderService: OrderServiceProtocol {
         }
     }
     
-    func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus {
+    public func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus {
         // First check local cache
         if let cachedOrder = await cache.getOrder(orderID) {
             // If order is terminal, return cached status
@@ -165,7 +165,7 @@ final class OrderService: OrderServiceProtocol {
         }
     }
     
-    func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) async throws {
+    public func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) async throws {
         do {
             // Update server first
             try await networkClient.updateOrderStatus(orderID, status: status)
@@ -181,11 +181,11 @@ final class OrderService: OrderServiceProtocol {
         }
     }
     
-    func cancelOrder(_ orderID: String) async throws {
+    public func cancelOrder(_ orderID: String) async throws {
         try await updateOrderStatus(orderID, status: .cancelled)
     }
     
-    func cleanupExpiredOrders() async throws {
+    public func cleanupExpiredOrders() async throws {
         let expiredOrders = await cache.getExpiredOrders()
         
         for order in expiredOrders {
@@ -207,7 +207,7 @@ final class OrderService: OrderServiceProtocol {
         }
     }
     
-    func recoverPendingOrders() async throws -> [IAPOrder] {
+    public func recoverPendingOrders() async throws -> [IAPOrder] {
         let pendingOrders = await cache.getPendingOrders()
         var recoveredOrders: [IAPOrder] = []
         

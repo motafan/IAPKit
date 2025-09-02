@@ -68,6 +68,13 @@ Or add it through Xcode:
 2. Enter the repository URL
 3. Select the version and add to your target
 
+### Requirements
+
+- **iOS 13.0+** or **macOS 10.15+**
+- **Swift 6.0+**
+- **Xcode 15.0+**
+- **StoreKit** framework (automatically linked)
+
 ## 🚀 Quick Start
 
 ### Basic Setup
@@ -79,9 +86,10 @@ class AppDelegate: UIApplicationDelegate {
     func application(_ application: UIApplication, 
                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         
-        // Initialize the IAP framework
+        // Initialize the IAP framework with network configuration
         Task {
-            await IAPManager.shared.initialize()
+            let networkBaseURL = URL(string: "https://your-api.com")!
+            try await IAPManager.shared.initialize(networkBaseURL: networkBaseURL)
         }
         
         return true
@@ -92,6 +100,27 @@ class AppDelegate: UIApplicationDelegate {
         IAPManager.shared.cleanup()
     }
 }
+```
+
+### Custom Configuration
+
+```swift
+import IAPKit
+
+// Create custom configuration
+let networkConfig = NetworkConfiguration.default(baseURL: URL(string: "https://your-api.com")!)
+let config = IAPConfiguration(
+    enableDebugLogging: true,
+    autoFinishTransactions: true,
+    maxRetryAttempts: 5,
+    productCacheExpiration: 600, // 10 minutes
+    autoRecoverTransactions: true,
+    networkConfiguration: networkConfig
+)
+
+// Initialize with custom configuration
+let manager = IAPManager(configuration: config)
+try await manager.initialize(configuration: nil) // Uses constructor config
 ```
 
 ### Loading Products
@@ -355,17 +384,26 @@ struct StoreView: View {
 
 ## ⚙️ Configuration
 
-### Custom Configuration
+### Advanced Configuration
 
 ```swift
-var config = IAPConfiguration.default
-config.enableDebugLogging = true
-config.autoFinishTransactions = false
-config.productCacheExpiration = 3600 // 1 hour
-config.maxRetryAttempts = 5
+// Create network configuration
+let networkConfig = NetworkConfiguration.default(baseURL: URL(string: "https://your-api.com")!)
+
+// Create IAP configuration
+let config = IAPConfiguration(
+    enableDebugLogging: true,
+    autoFinishTransactions: false,
+    maxRetryAttempts: 5,
+    baseRetryDelay: 2.0,
+    productCacheExpiration: 3600, // 1 hour
+    autoRecoverTransactions: true,
+    receiptValidation: .default,
+    networkConfiguration: networkConfig
+)
 
 let customManager = IAPManager(configuration: config)
-await customManager.initialize()
+try await customManager.initialize(configuration: nil)
 ```
 
 ### Receipt Validation
@@ -377,23 +415,29 @@ let result = try await iapManager.validateReceipt(receiptData)
 // Validation with order information (enhanced security)
 let result = try await iapManager.validateReceipt(receiptData, with: order)
 
-// Custom remote validation
+// Custom remote validation configuration
+let remoteValidationConfig = ReceiptValidationConfiguration.remote(
+    serverURL: URL(string: "https://your-validation-server.com/validate")!,
+    timeout: 30.0,
+    cacheExpiration: 300.0
+)
+
+let networkConfig = NetworkConfiguration.default(baseURL: URL(string: "https://your-api.com")!)
+let config = IAPConfiguration(
+    receiptValidation: remoteValidationConfig,
+    networkConfiguration: networkConfig
+)
+
+// Custom receipt validator implementation
 class CustomReceiptValidator: ReceiptValidatorProtocol {
     func validateReceipt(_ receiptData: Data) async throws -> IAPReceiptValidationResult {
         // Implement your server-side validation
         // Send receiptData to your server
         // Return validation result
-    }
-    
-    func validateReceipt(_ receiptData: Data, with order: IAPOrder) async throws -> IAPReceiptValidationResult {
-        // Enhanced validation with order information
-        // Send both receiptData and order to your server
-        // Validate order-receipt consistency
-        // Return comprehensive validation result
+        return IAPReceiptValidationResult(isValid: true, error: nil)
     }
 }
 
-let config = IAPConfiguration.default
 let customValidator = CustomReceiptValidator()
 let manager = IAPManager(configuration: config, receiptValidator: customValidator)
 ```
@@ -404,13 +448,11 @@ IAPKit provides flexible network layer customization for advanced use cases:
 
 ```swift
 // Basic network configuration
-let networkConfig = NetworkConfiguration(
-    baseURL: URL(string: "https://your-api.com")!,
-    timeout: 30.0,
-    maxRetryAttempts: 3
-)
+let networkConfig = NetworkConfiguration.default(baseURL: URL(string: "https://your-api.com")!)
 
 let config = IAPConfiguration(
+    enableDebugLogging: false,
+    autoFinishTransactions: true,
     networkConfiguration: networkConfig
 )
 ```
@@ -446,14 +488,33 @@ let validatingParser = ValidatingNetworkResponseParser { data, response in
 }
 
 let customComponents = NetworkCustomComponents(
+    requestExecutor: nil,
+    responseParser: validatingParser,
     requestBuilder: secureBuilder,
-    responseParser: validatingParser
+    endpointBuilder: nil
 )
 
 let networkConfig = NetworkConfiguration(
     baseURL: URL(string: "https://api.com")!,
     customComponents: customComponents
 )
+```
+
+#### Standalone Network Client Usage
+
+The NetworkClient can be used independently for general API operations:
+
+```swift
+// Create standalone network client
+let networkConfig = NetworkConfiguration.default(baseURL: URL(string: "https://your-api.com")!)
+let networkClient = NetworkClient.default(configuration: networkConfig)
+
+// Create and manage orders
+let order = IAPOrder.created(id: "order-123", productID: "product-456", userInfo: nil, serverOrderID: nil)
+let response = try await networkClient.createOrder(order)
+
+// Query order status
+let statusResponse = try await networkClient.queryOrderStatus(response.serverOrderID)
 ```
 
 For detailed network customization guide, see [Network Customization Guide](docs/NETWORK_CUSTOMIZATION_GUIDE.md).
@@ -823,24 +884,35 @@ print(report.summary)
 
 ### Core Classes
 
-- **`IAPManager`**: Main interface for all IAP operations
-- **`IAPProduct`**: Represents an App Store product
-- **`IAPTransaction`**: Represents a purchase transaction
-- **`IAPOrder`**: Represents a server-side order with user context
-- **`IAPError`**: Framework-specific error types
+- **`IAPManager`**: Main interface for all IAP operations with order management
+- **`IAPProduct`**: Represents an App Store product with pricing and subscription info
+- **`IAPTransaction`**: Represents a purchase transaction with state tracking
+- **`IAPOrder`**: Server-side order with user context and analytics data
+- **`IAPError`**: Comprehensive error types including order-specific errors
+- **`NetworkClient`**: Standalone HTTP client for order management APIs
 
 ### Configuration
 
-- **`IAPConfiguration`**: Framework configuration options
-- **`IAPState`**: Current framework state management
+- **`IAPConfiguration`**: Framework configuration with network settings
+- **`NetworkConfiguration`**: Network layer configuration with custom components
+- **`ReceiptValidationConfiguration`**: Receipt validation settings (local/remote/hybrid)
+- **`NetworkCustomComponents`**: Custom network component implementations
 
 ### Services
 
-- **`ProductService`**: Product loading and caching
-- **`PurchaseService`**: Purchase processing with order management
-- **`OrderService`**: Server-side order creation and tracking
-- **`TransactionMonitor`**: Transaction monitoring
-- **`ReceiptValidator`**: Receipt validation with order support
+- **`ProductService`**: Product loading, caching, and validation
+- **`PurchaseService`**: Purchase processing with order-based flow
+- **`OrderService`**: Server-side order creation, tracking, and management
+- **`TransactionMonitor`**: Real-time transaction monitoring and recovery
+- **`ReceiptValidator`**: Receipt validation with order correlation
+- **`RetryManager`**: Configurable retry logic for network operations
+
+### Network Components
+
+- **`NetworkRequestExecutor`**: HTTP request execution (customizable)
+- **`NetworkResponseParser`**: Response parsing and validation (customizable)
+- **`NetworkRequestBuilder`**: Request construction and signing (customizable)
+- **`NetworkEndpointBuilder`**: API endpoint construction (customizable)
 
 ## 🤝 Contributing
 

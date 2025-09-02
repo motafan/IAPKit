@@ -51,15 +51,19 @@ private init()
 public init(
     configuration: IAPConfiguration,
     adapter: StoreKitAdapterProtocol? = nil,
-    receiptValidator: ReceiptValidatorProtocol? = nil
+    receiptValidator: ReceiptValidatorProtocol? = nil,
+    orderService: OrderServiceProtocol? = nil
 )
 ```
 
 #### Lifecycle Methods
 
 ```swift
-/// Initialize the framework
-public func initialize() async
+/// Initialize the framework with configuration
+public func initialize(configuration: IAPConfiguration?) async throws
+
+/// Initialize with network base URL (convenience method)
+public func initialize(networkBaseURL: URL) async throws
 
 /// Clean up resources
 public func cleanup()

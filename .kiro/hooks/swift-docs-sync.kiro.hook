@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "name": "Swift Documentation Sync",
+  "description": "Monitors Swift source files and related configuration files for changes, then updates documentation in README.md and docs/ folder to keep them synchronized with code changes",
+  "version": "1",
+  "when": {
+    "type": "userTriggered",
+    "patterns": [
+      "Sources/**/*.swift",
+      "Tests/**/*.swift",
+      "Examples/**/*.swift",
+      "Package.swift",
+      "*.md"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Swift source files or configuration have been modified. Please review the changes and update the documentation accordingly:\n\n1. Check if README.md needs updates for:\n   - API changes or new features\n   - Usage examples\n   - Installation instructions\n   - Feature descriptions\n\n2. Review docs/ folder files that may need updates:\n   - API_REFERENCE.md for new APIs or changes\n   - USAGE_GUIDE.md for new usage patterns\n   - TROUBLESHOOTING.md for new issues or solutions\n   - Other relevant documentation files\n\n3. Ensure documentation reflects:\n   - New public APIs or protocols\n   - Changed method signatures\n   - New configuration options\n   - Updated examples or best practices\n\nFocus on keeping documentation accurate, comprehensive, and user-friendly. Make sure code examples in documentation match the actual implementation."
+  }
+}

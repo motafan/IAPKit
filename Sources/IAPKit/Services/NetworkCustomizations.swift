@@ -7,9 +7,9 @@
 
 import Foundation
 
-// MARK: - Example Custom Implementations
+// MARK: - 示例自定义实现
 
-/// Example: Custom request executor with authentication
+/// 示例：带身份验证的自定义请求执行器
 public final class AuthenticatedNetworkRequestExecutor: NetworkRequestExecutor {
     private let session: URLSession
     private let authTokenProvider: @Sendable () async throws -> String
@@ -22,7 +22,7 @@ public final class AuthenticatedNetworkRequestExecutor: NetworkRequestExecutor {
     public func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
         var authenticatedRequest = request
         
-        // Add authentication token
+        // 添加身份验证令牌
         let token = try await authTokenProvider()
         authenticatedRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         
@@ -30,7 +30,7 @@ public final class AuthenticatedNetworkRequestExecutor: NetworkRequestExecutor {
     }
 }
 
-/// Example: Custom response parser with additional validation
+/// 示例：带附加验证的自定义响应解析器
 public final class ValidatingNetworkResponseParser: NetworkResponseParser {
     private let decoder: JSONDecoder
     private let validator: @Sendable (Data, URLResponse) async throws -> Void
@@ -45,22 +45,22 @@ public final class ValidatingNetworkResponseParser: NetworkResponseParser {
     }
     
     public func parse<T: Codable>(_ data: Data, response: URLResponse, as type: T.Type) async throws -> T {
-        // Custom validation
+        // 自定义验证
         try await validator(data, response)
         
-        // Check HTTP status
+        // 检查 HTTP 状态
         if let httpResponse = response as? HTTPURLResponse {
             guard 200...299 ~= httpResponse.statusCode else {
                 throw mapHTTPError(statusCode: httpResponse.statusCode, data: data)
             }
         }
         
-        // Handle empty response types
+        // 处理空响应类型
         if T.self == EmptyResponse.self {
             return EmptyResponse() as! T
         }
         
-        // Parse JSON response
+        // 解析 JSON 响应
         return try decoder.decode(T.self, from: data)
     }
     
@@ -84,7 +84,7 @@ public final class ValidatingNetworkResponseParser: NetworkResponseParser {
     }
 }
 
-/// Example: Custom endpoint builder with versioned API paths
+/// 示例：带版本化 API 路径的自定义端点构建器
 public final class VersionedNetworkEndpointBuilder: NetworkEndpointBuilder {
     private let baseURL: URL
     private let apiVersion: String
@@ -127,7 +127,7 @@ public final class VersionedNetworkEndpointBuilder: NetworkEndpointBuilder {
     }
 }
 
-/// Example: Custom request builder with additional headers and encryption
+/// 示例：带附加请求头和加密的自定义请求构建器
 public final class SecureNetworkRequestBuilder: NetworkRequestBuilder {
     private let timeout: TimeInterval
     private let additionalHeaders: [String: String]
@@ -153,27 +153,27 @@ public final class SecureNetworkRequestBuilder: NetworkRequestBuilder {
         request.httpMethod = method
         request.timeoutInterval = timeout
         
-        // Set default headers
+        // 设置默认请求头
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         
-        // Add additional headers
+        // 添加附加请求头
         additionalHeaders.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }
         
-        // Add custom headers
+        // 添加自定义请求头
         headers?.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }
         
-        // Add and encrypt request body if provided
+        // 如果提供了请求体，则添加并加密
         if let body = body {
             let jsonData = try JSONSerialization.data(withJSONObject: body, options: [])
             let encryptedData = try await encryptBody(jsonData)
             request.httpBody = encryptedData
             
-            // Update content type if encryption changes format
+            // 如果加密改变了格式，则更新内容类型
             if encryptedData != jsonData {
                 request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
             }
@@ -183,12 +183,12 @@ public final class SecureNetworkRequestBuilder: NetworkRequestBuilder {
     }
 }
 
-// MARK: - Convenience Extensions
+// MARK: - 便利扩展
 
 extension NetworkConfiguration {
-    /// Creates a default network configuration with the specified base URL
-    /// - Parameter baseURL: The base URL for network requests
-    /// - Returns: A NetworkConfiguration with default settings
+    /// 使用指定的基础 URL 创建默认网络配置
+    /// - Parameter baseURL: 网络请求的基础 URL
+    /// - Returns: 具有默认设置的 NetworkConfiguration
     public static func `default`(baseURL: URL) -> NetworkConfiguration {
         return NetworkConfiguration(
             baseURL: baseURL,
@@ -199,7 +199,7 @@ extension NetworkConfiguration {
         )
     }
     
-    /// Creates configuration with authentication support
+    /// 创建支持身份验证的配置
     public static func withAuthentication(
         baseURL: URL,
         authTokenProvider: @escaping @Sendable () async throws -> String,
@@ -216,7 +216,7 @@ extension NetworkConfiguration {
         )
     }
     
-    /// Creates configuration with response validation
+    /// 创建支持响应验证的配置
     public static func withValidation(
         baseURL: URL,
         validator: @escaping @Sendable (Data, URLResponse) async throws -> Void,
@@ -233,7 +233,7 @@ extension NetworkConfiguration {
         )
     }
     
-    /// Creates configuration with secure request building
+    /// 创建支持安全请求构建的配置
     public static func withSecurity(
         baseURL: URL,
         additionalHeaders: [String: String] = [:],
@@ -255,7 +255,7 @@ extension NetworkConfiguration {
         )
     }
     
-    /// Creates configuration with custom endpoint building
+    /// 创建支持自定义端点构建的配置
     public static func withCustomEndpoints(
         baseURL: URL,
         endpointBuilder: NetworkEndpointBuilder,

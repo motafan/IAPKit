@@ -50,9 +50,9 @@ public struct IAPConfiguration: Sendable {
 // MARK: - IAPConfiguration Extensions
 
 extension IAPConfiguration {
-    /// Creates a default configuration with the specified network base URL
-    /// - Parameter networkBaseURL: The base URL for network requests
-    /// - Returns: An IAPConfiguration with default settings
+    /// 使用指定的网络基础 URL 创建默认配置
+    /// - Parameter networkBaseURL: 网络请求的基础 URL
+    /// - Returns: 具有默认设置的 IAPConfiguration
     public static func `default`(networkBaseURL: URL) -> IAPConfiguration {
         return IAPConfiguration(
             enableDebugLogging: false,
@@ -66,8 +66,8 @@ extension IAPConfiguration {
         )
     }
     
-    /// Creates a placeholder configuration for uninitialized instances
-    /// - Returns: An IAPConfiguration with placeholder settings
+    /// 为未初始化的实例创建占位符配置
+    /// - Returns: 具有占位符设置的 IAPConfiguration
     internal static let placeholder = IAPConfiguration(
         enableDebugLogging: false,
         autoFinishTransactions: true,

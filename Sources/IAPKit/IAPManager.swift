@@ -218,7 +218,7 @@ public final class IAPManager: IAPManagerProtocol {
         IAPLogger.info("IAPManager: Initialized with custom configuration")
     }
     
-    // MARK: - Lifecycle Management
+    // MARK: - 生命周期管理
     
     /// 初始化框架
     /// - Parameter configuration: 可选的配置信息，如果为 nil 则使用通过构造函数传入的配置

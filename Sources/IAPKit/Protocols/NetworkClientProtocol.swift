@@ -7,40 +7,40 @@
 
 import Foundation
 
-/// Protocol for network request execution
-/// Allows customization of how HTTP requests are sent
+/// 网络请求执行协议
+/// 允许自定义 HTTP 请求的发送方式
 public protocol NetworkRequestExecutor: Sendable {
-    /// Executes an HTTP request
-    /// - Parameter request: The URLRequest to execute
-    /// - Returns: Response data and URLResponse
-    /// - Throws: Error if request fails
+    /// 执行 HTTP 请求
+    /// - Parameter request: 要执行的 URLRequest
+    /// - Returns: 响应数据和 URLResponse
+    /// - Throws: 请求失败时抛出错误
     func execute(_ request: URLRequest) async throws -> (Data, URLResponse)
 }
 
-/// Protocol for response parsing
-/// Allows customization of how responses are parsed
+/// 响应解析协议
+/// 允许自定义响应的解析方式
 public protocol NetworkResponseParser: Sendable {
-    /// Parses response data into a specific type
+    /// 将响应数据解析为指定类型
     /// - Parameters:
-    ///   - data: Raw response data
-    ///   - response: URLResponse containing metadata
-    ///   - type: Target type to parse into
-    /// - Returns: Parsed object of specified type
-    /// - Throws: Error if parsing fails
+    ///   - data: 原始响应数据
+    ///   - response: 包含元数据的 URLResponse
+    ///   - type: 要解析成的目标类型
+    /// - Returns: 指定类型的解析对象
+    /// - Throws: 解析失败时抛出错误
     func parse<T: Codable>(_ data: Data, response: URLResponse, as type: T.Type) async throws -> T
 }
 
-/// Protocol for request building
-/// Allows customization of how requests are constructed
+/// 请求构建协议
+/// 允许自定义请求的构建方式
 public protocol NetworkRequestBuilder: Sendable {
-    /// Builds a URLRequest for the given parameters
+    /// 为给定参数构建 URLRequest
     /// - Parameters:
-    ///   - endpoint: Target URL
-    ///   - method: HTTP method
-    ///   - body: Request body data (optional)
-    ///   - headers: Additional headers (optional)
-    /// - Returns: Configured URLRequest
-    /// - Throws: Error if request building fails
+    ///   - endpoint: 目标 URL
+    ///   - method: HTTP 方法
+    ///   - body: 请求体数据（可选）
+    ///   - headers: 附加请求头（可选）
+    /// - Returns: 配置好的 URLRequest
+    /// - Throws: 请求构建失败时抛出错误
     func buildRequest(
         endpoint: URL,
         method: String,
@@ -49,18 +49,18 @@ public protocol NetworkRequestBuilder: Sendable {
     ) async throws -> URLRequest
 }
 
-/// Protocol for building endpoints based on order service actions
+/// 基于订单服务操作构建端点的协议
 public protocol NetworkEndpointBuilder: Sendable {
-    /// Builds endpoint URL for a specific order service action
+    /// 为特定订单服务操作构建端点 URL
     /// - Parameters:
-    ///   - action: The order service action
-    ///   - parameters: Action-specific parameters
-    /// - Returns: Complete endpoint URL
-    /// - Throws: Error if endpoint building fails
+    ///   - action: 订单服务操作
+    ///   - parameters: 操作特定的参数
+    /// - Returns: 完整的端点 URL
+    /// - Throws: 端点构建失败时抛出错误
     func buildEndpoint(for action: OrderServiceAction, parameters: [String: String]) async throws -> URL
 }
 
-/// Enum representing different order service actions
+/// 表示不同订单服务操作的枚举
 public enum OrderServiceAction: String, Sendable, CaseIterable {
     case createOrder = "create_order"
     case queryOrderStatus = "query_order_status"
@@ -69,7 +69,7 @@ public enum OrderServiceAction: String, Sendable, CaseIterable {
     case cleanupExpiredOrders = "cleanup_expired_orders"
     case recoverPendingOrders = "recover_pending_orders"
     
-    /// HTTP method for the action
+    /// 操作对应的 HTTP 方法
     public var httpMethod: String {
         switch self {
         case .createOrder:
@@ -85,7 +85,7 @@ public enum OrderServiceAction: String, Sendable, CaseIterable {
         }
     }
     
-    /// Default endpoint path for the action
+    /// 操作的默认端点路径
     public var defaultPath: String {
         switch self {
         case .createOrder:
@@ -104,7 +104,7 @@ public enum OrderServiceAction: String, Sendable, CaseIterable {
     }
 }
 
-/// Response model for order recovery operations
+/// 订单恢复操作的响应模型
 public struct OrderRecoveryResponse: Sendable, Codable {
     public let recoveredOrders: [OrderCreationResponse]
     public let totalRecovered: Int
@@ -117,7 +117,7 @@ public struct OrderRecoveryResponse: Sendable, Codable {
     }
 }
 
-/// Response model for cleanup operations
+/// 清理操作的响应模型
 public struct CleanupResponse: Sendable, Codable {
     public let cleanedOrdersCount: Int
     public let timestamp: Date
@@ -128,39 +128,39 @@ public struct CleanupResponse: Sendable, Codable {
     }
 }
 
-/// Main protocol for network client functionality
+/// 网络客户端功能的主要协议
 public protocol NetworkClientProtocol: Sendable {
-    /// Creates an order on the server
-    /// - Parameter order: The local order to create on server
-    /// - Returns: Server response with order details
-    /// - Throws: IAPError if creation fails
+    /// 在服务器上创建订单
+    /// - Parameter order: 要在服务器上创建的本地订单
+    /// - Returns: 包含订单详情的服务器响应
+    /// - Throws: 创建失败时抛出 IAPError
     func createOrder(_ order: IAPOrder) async throws -> OrderCreationResponse
     
-    /// Queries order status from server
-    /// - Parameter orderID: The order identifier
-    /// - Returns: Current order status response
-    /// - Throws: IAPError if query fails
+    /// 从服务器查询订单状态
+    /// - Parameter orderID: 订单标识符
+    /// - Returns: 当前订单状态响应
+    /// - Throws: 查询失败时抛出 IAPError
     func queryOrderStatus(_ orderID: String) async throws -> OrderStatusResponse
     
-    /// Updates order status on server
+    /// 在服务器上更新订单状态
     /// - Parameters:
-    ///   - orderID: The order identifier
-    ///   - status: The new status
-    /// - Throws: IAPError if update fails
+    ///   - orderID: 订单标识符
+    ///   - status: 新状态
+    /// - Throws: 更新失败时抛出 IAPError
     func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) async throws
     
-    /// Cancels an existing order
-    /// - Parameter orderID: The unique identifier of the order to cancel
-    /// - Throws: IAPError if the order cannot be cancelled
+    /// 取消现有订单
+    /// - Parameter orderID: 要取消的订单的唯一标识符
+    /// - Throws: 无法取消订单时抛出 IAPError
     func cancelOrder(_ orderID: String) async throws
     
-    /// Cleans up expired orders from server
-    /// - Returns: Response containing cleanup statistics
-    /// - Throws: IAPError if cleanup operations fail
+    /// 从服务器清理过期订单
+    /// - Returns: 包含清理统计信息的响应
+    /// - Throws: 清理操作失败时抛出 IAPError
     func cleanupExpiredOrders() async throws -> CleanupResponse
     
-    /// Recovers pending orders from server
-    /// - Returns: Response containing recovered orders
-    /// - Throws: IAPError if recovery operations fail
+    /// 从服务器恢复待处理订单
+    /// - Returns: 包含恢复订单的响应
+    /// - Throws: 恢复操作失败时抛出 IAPError
     func recoverPendingOrders() async throws -> OrderRecoveryResponse
 }

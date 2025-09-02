@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Default implementation of NetworkRequestExecutor using URLSession
+/// 使用 URLSession 的网络请求执行器默认实现
 public final class DefaultNetworkRequestExecutor: NetworkRequestExecutor {
     private let session: URLSession
     
@@ -20,7 +20,7 @@ public final class DefaultNetworkRequestExecutor: NetworkRequestExecutor {
     }
 }
 
-/// Default implementation of NetworkResponseParser using JSONDecoder
+/// 使用 JSONDecoder 的网络响应解析器默认实现
 public final class DefaultNetworkResponseParser: NetworkResponseParser {
     private let decoder: JSONDecoder
     
@@ -30,23 +30,23 @@ public final class DefaultNetworkResponseParser: NetworkResponseParser {
     }
     
     public func parse<T: Codable>(_ data: Data, response: URLResponse, as type: T.Type) async throws -> T {
-        // Check HTTP status first
+        // 首先检查 HTTP 状态
         if let httpResponse = response as? HTTPURLResponse {
             guard 200...299 ~= httpResponse.statusCode else {
                 throw mapHTTPError(statusCode: httpResponse.statusCode, data: data)
             }
         }
         
-        // Handle empty response types
+        // 处理空响应类型
         if T.self == EmptyResponse.self {
             return EmptyResponse() as! T
         }
         
-        // Parse JSON response
+        // 解析 JSON 响应
         return try decoder.decode(T.self, from: data)
     }
     
-    /// Maps HTTP status codes to appropriate IAP errors
+    /// 将 HTTP 状态码映射到相应的 IAP 错误
     private func mapHTTPError(statusCode: Int, data: Data) -> IAPError {
         switch statusCode {
         case 400:
@@ -67,7 +67,7 @@ public final class DefaultNetworkResponseParser: NetworkResponseParser {
     }
 }
 
-/// Default implementation of NetworkRequestBuilder
+/// 网络请求构建器的默认实现
 public final class DefaultNetworkRequestBuilder: NetworkRequestBuilder {
     private let timeout: TimeInterval
     
@@ -85,16 +85,16 @@ public final class DefaultNetworkRequestBuilder: NetworkRequestBuilder {
         request.httpMethod = method
         request.timeoutInterval = timeout
         
-        // Set default headers
+        // 设置默认请求头
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         
-        // Add custom headers
+        // 添加自定义请求头
         headers?.forEach { key, value in
             request.setValue(value, forHTTPHeaderField: key)
         }
         
-        // Add request body if provided
+        // 如果提供了请求体则添加
         if let body = body {
             let jsonData = try JSONSerialization.data(withJSONObject: body, options: [])
             request.httpBody = jsonData
@@ -104,7 +104,7 @@ public final class DefaultNetworkRequestBuilder: NetworkRequestBuilder {
     }
 }
 
-/// Default implementation of NetworkEndpointBuilder
+/// 网络端点构建器的默认实现
 public final class DefaultNetworkEndpointBuilder: NetworkEndpointBuilder {
     private let baseURL: URL
     
@@ -115,7 +115,7 @@ public final class DefaultNetworkEndpointBuilder: NetworkEndpointBuilder {
     public func buildEndpoint(for action: OrderServiceAction, parameters: [String: String]) async throws -> URL {
         var path = action.defaultPath
         
-        // Replace path parameters with actual values
+        // 用实际值替换路径参数
         for (key, value) in parameters {
             path = path.replacingOccurrences(of: "{\(key)}", with: value)
         }
@@ -124,7 +124,7 @@ public final class DefaultNetworkEndpointBuilder: NetworkEndpointBuilder {
     }
 }
 
-/// Empty response for operations that don't return data
+/// 不返回数据的操作的空响应
 public struct EmptyResponse: Codable, Sendable {
     public init() {}
 }

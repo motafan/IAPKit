@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Order cache item for local storage
+/// 本地存储的订单缓存项
 struct OrderCacheItem: Sendable {
     let order: IAPOrder
     let cachedAt: Date
@@ -18,21 +18,21 @@ struct OrderCacheItem: Sendable {
     }
 }
 
-/// Order cache manager for local order storage and retrieval
+/// 本地订单存储和检索的缓存管理器
 actor OrderCache {
     private var orders: [String: OrderCacheItem] = [:]
     
-    /// Stores an order in the cache
+    /// 在缓存中存储订单
     func storeOrder(_ order: IAPOrder) {
         orders[order.id] = OrderCacheItem(order: order)
     }
     
-    /// Retrieves an order from the cache
+    /// 从缓存中检索订单
     func getOrder(_ orderID: String) -> IAPOrder? {
         return orders[orderID]?.order
     }
     
-    /// Updates order status in cache
+    /// 更新缓存中的订单状态
     func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) {
         guard let item = orders[orderID] else { return }
         let updatedOrder = IAPOrder(
@@ -50,19 +50,19 @@ actor OrderCache {
         orders[orderID] = OrderCacheItem(order: updatedOrder)
     }
     
-    /// Removes an order from cache
+    /// 从缓存中移除订单
     func removeOrder(_ orderID: String) {
         orders.removeValue(forKey: orderID)
     }
     
-    /// Gets all expired orders
+    /// 获取所有过期订单
     func getExpiredOrders() -> [IAPOrder] {
         return orders.values
             .map { $0.order }
             .filter { $0.isExpired }
     }
     
-    /// Gets all pending orders (created or pending status)
+    /// 获取所有待处理订单（已创建或待处理状态）
     func getPendingOrders() -> [IAPOrder] {
         return orders.values
             .map { $0.order }
@@ -76,31 +76,31 @@ actor OrderCache {
             }
     }
     
-    /// Gets all orders with active status
+    /// 获取所有活跃状态的订单
     func getActiveOrders() -> [IAPOrder] {
         return orders.values
             .map { $0.order }
             .filter { $0.isActive }
     }
     
-    /// Clears all orders from cache
+    /// 清除缓存中的所有订单
     func clearAll() {
         orders.removeAll()
     }
 }
 
-/// Service implementation for order management
-/// Handles order creation, status tracking, and lifecycle management
+/// 订单管理的服务实现
+/// 处理订单创建、状态跟踪和生命周期管理
 @MainActor
 final public class OrderService: OrderServiceProtocol {
 
-    // MARK: - Dependencies
+    // MARK: - 依赖项
     
     private let networkClient: NetworkClient
     private let cache: OrderCache
     private let retryManager: RetryManager
     
-    // MARK: - Initialization
+    // MARK: - 初始化
     
     public init(networkClient: NetworkClient, retryManager: RetryManager = RetryManager()) {
         self.networkClient = networkClient
@@ -115,20 +115,20 @@ final public class OrderService: OrderServiceProtocol {
         let localOrder = createLocalOrder(for: product, userInfo: userInfo)
         
         do {
-            // 2. Send order creation request to server
+            // 2. 向服务器发送订单创建请求
             let serverResponse = try await networkClient.createOrder(localOrder)
             
-            // 3. Update local order with server response
+            // 3. 使用服务器响应更新本地订单
             let finalOrder = updateOrderWithServerResponse(localOrder, response: serverResponse)
             
-            // 4. Cache the order
+            // 4. 缓存订单
             await cache.storeOrder(finalOrder)
             
             IAPLogger.debug("Order created successfully: \(finalOrder.id)")
             return finalOrder
             
         } catch {
-            // Store failed order locally for potential recovery
+            // 将失败的订单存储在本地以便可能的恢复
             await cache.storeOrder(localOrder.withStatus(.failed))
             IAPLogger.error("Order creation failed: \(error)")
             throw IAPError.orderCreationFailed(underlying: error.localizedDescription)
@@ -136,26 +136,26 @@ final public class OrderService: OrderServiceProtocol {
     }
     
     public func queryOrderStatus(_ orderID: String) async throws -> IAPOrderStatus {
-        // First check local cache
+        // 首先检查本地缓存
         if let cachedOrder = await cache.getOrder(orderID) {
-            // If order is terminal, return cached status
+            // 如果订单是终态，返回缓存状态
             if cachedOrder.status.isTerminal {
                 return cachedOrder.status
             }
         }
         
         do {
-            // Query server for latest status
+            // 查询服务器获取最新状态
             let serverResponse = try await networkClient.queryOrderStatus(orderID)
             let serverStatus = IAPOrderStatus(rawValue: serverResponse.status) ?? .failed
             
-            // Update local cache
+            // 更新本地缓存
             await cache.updateOrderStatus(orderID, status: serverStatus)
             
             return serverStatus
             
         } catch {
-            // If server query fails, return cached status if available
+            // 如果服务器查询失败，返回缓存状态（如果可用）
             if let cachedOrder = await cache.getOrder(orderID) {
                 IAPLogger.debug("Using cached order status due to server error: \(error)")
                 return cachedOrder.status
@@ -167,10 +167,10 @@ final public class OrderService: OrderServiceProtocol {
     
     public func updateOrderStatus(_ orderID: String, status: IAPOrderStatus) async throws {
         do {
-            // Update server first
+            // 首先更新服务器
             try await networkClient.updateOrderStatus(orderID, status: status)
             
-            // Update local cache
+            // 更新本地缓存
             await cache.updateOrderStatus(orderID, status: status)
             
             IAPLogger.debug("Order status updated: \(orderID) -> \(status)")
@@ -190,19 +190,19 @@ final public class OrderService: OrderServiceProtocol {
         
         for order in expiredOrders {
             do {
-                // Try to cancel expired orders on server
+                // 尝试在服务器上取消过期订单
                 if !order.status.isTerminal {
                     try await cancelOrder(order.id)
                 }
                 
-                // Remove from local cache
+                // 从本地缓存中移除
                 await cache.removeOrder(order.id)
                 
                 IAPLogger.debug("Cleaned up expired order: \(order.id)")
                 
             } catch {
                 IAPLogger.error("Failed to cleanup expired order \(order.id): \(error)")
-                // Continue with other orders even if one fails
+                // 即使一个失败也继续处理其他订单
             }
         }
     }
@@ -222,21 +222,21 @@ final public class OrderService: OrderServiceProtocol {
                 }
             } catch {
                 IAPLogger.debug("Failed to recover order \(order.id): \(error)")
-                // Continue with other orders
+                // 继续处理其他订单
             }
         }
         
         return recoveredOrders
     }
     
-    // MARK: - Private Helper Methods
+    // MARK: - 私有辅助方法
     
-    /// Creates a local order record before server communication
+    /// 在服务器通信之前创建本地订单记录
     private func createLocalOrder(for product: IAPProduct, userInfo: [String: Any]?) -> IAPOrder {
         let orderID = UUID().uuidString
-        let expirationTime = Date().addingTimeInterval(3600) // 1 hour expiration
+        let expirationTime = Date().addingTimeInterval(3600) // 1小时过期
         
-        // Convert [String: Any]? to [String: String]?
+        // 将 [String: Any]? 转换为 [String: String]?
         let stringUserInfo: [String: String]? = userInfo?.compactMapValues { value in
             return String(describing: value)
         }
@@ -255,7 +255,7 @@ final public class OrderService: OrderServiceProtocol {
         )
     }
     
-    /// Updates local order with server response data
+    /// 使用服务器响应数据更新本地订单
     private func updateOrderWithServerResponse(_ localOrder: IAPOrder, response: OrderCreationResponse) -> IAPOrder {
         let serverStatus = IAPOrderStatus(rawValue: response.status) ?? .created
         
@@ -273,10 +273,10 @@ final public class OrderService: OrderServiceProtocol {
         )
     }
     
-    /// Extracts user ID from user info dictionary
+    /// 从用户信息字典中提取用户ID
     private func extractUserID(from userInfo: [String: Any]?) -> String? {
         return userInfo?["userID"] as? String
     }
 }
 
-// Note: IAPOrder.withStatus extension is already defined in IAPOrder.swift
+// 注意：IAPOrder.withStatus 扩展已在 IAPOrder.swift 中定义

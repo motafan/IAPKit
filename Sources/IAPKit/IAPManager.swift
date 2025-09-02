@@ -142,7 +142,7 @@ public final class IAPManager: IAPManagerProtocol {
     
     /// 是否正在监听交易
     public var isTransactionObserverActive: Bool {
-        return transactionMonitor?.isCurrentlyMonitoring ?? false
+        return state.isTransactionObserverActive
     }
     
     // MARK: - Initialization
@@ -262,22 +262,24 @@ public final class IAPManager: IAPManagerProtocol {
             IAPLogger.debug("IAPManager: Already initialized with same configuration")
         }
         
-        // 启动交易监控（暂时禁用以确认问题所在）
-        IAPLogger.debug("IAPManager: Skipping transaction observer for debugging")
-        // await startTransactionObserver()
-        IAPLogger.debug("IAPManager: Transaction observer startup skipped")
+        // 启动交易监控
+        await startTransactionObserver()
         
-        // 如果配置了自动恢复，则启动恢复流程
+        // 如果配置了自动恢复，则启动恢复流程（异步执行以避免阻塞初始化）
         if targetConfiguration.autoRecoverTransactions, let recoveryManager = recoveryManager {
-            let result = await recoveryManager.startRecovery()
-            switch result {
-            case .success(let count):
-                IAPLogger.info("IAPManager: Auto-recovery completed, recovered \(count) transactions")
-            case .failure(let error):
-                IAPLogger.logError(error, context: ["operation": "auto-recovery"])
-                state.setError(error)
-            case .alreadyInProgress:
-                break
+            Task {
+                let result = await recoveryManager.startRecovery()
+                switch result {
+                case .success(let count):
+                    IAPLogger.info("IAPManager: Auto-recovery completed, recovered \(count) transactions")
+                case .failure(let error):
+                    IAPLogger.logError(error, context: ["operation": "auto-recovery"])
+                    await MainActor.run {
+                        state.setError(error)
+                    }
+                case .alreadyInProgress:
+                    IAPLogger.debug("IAPManager: Recovery already in progress")
+                }
             }
         }
         
@@ -620,29 +622,15 @@ public final class IAPManager: IAPManagerProtocol {
     
     /// 开始监听交易状态变化
     public func startTransactionObserver() async {
-        guard let transactionMonitor = transactionMonitor else {
+        guard transactionMonitor != nil else {
             IAPLogger.warning("IAPManager: Cannot start transaction observer - not initialized")
             return
         }
         
         IAPLogger.debug("IAPManager: Starting transaction observer")
         
-        // 设置交易更新处理器
-        transactionMonitor.addTransactionUpdateHandler(identifier: "main") { [weak self] transaction in
-            if #available(iOS 13.0, macOS 10.15, *) {
-                Task { @MainActor in
-                    self?.handleTransactionUpdate(transaction)
-                }
-            } else {
-                // 对于更早的版本，直接在主队列执行
-                DispatchQueue.main.async {
-                    self?.handleTransactionUpdate(transaction)
-                }
-            }
-        }
-        
-        // 启动监控
-        await transactionMonitor.startMonitoring()
+        // 简化版本：只启动适配器的观察者，不进行复杂的监控
+        await adapter.startTransactionObserver()
         
         // 更新状态
         state.setTransactionObserverActive(true)

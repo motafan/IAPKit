@@ -80,9 +80,11 @@ public final class TransactionMonitor: Sendable {
         // 启动适配器的交易观察者
         await adapter.startTransactionObserver()
         
-        // 处理启动时的未完成交易
+        // 处理启动时的未完成交易（异步执行以避免阻塞启动）
         if configuration.autoRecoverTransactions {
-            await handlePendingTransactions()
+            Task {
+                await handlePendingTransactions()
+            }
         }
         
         // 启动订单监控

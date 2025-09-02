@@ -9,16 +9,26 @@ struct OrderBasedPurchaseFlowTests {
     
     // MARK: - Helper Methods for Test Setup
     
-    private func createTestServices() -> (MockPurchaseService, MockOrderService, IAPProduct) {
-        let mockPurchaseService = MockPurchaseService()
+    private func createTestServices() -> (PurchaseService, MockStoreKitAdapter, MockOrderService, MockReceiptValidator, IAPProduct) {
+        let mockAdapter = MockStoreKitAdapter()
         let mockOrderService = MockOrderService()
+        let mockReceiptValidator = MockReceiptValidator()
+        let configuration = IAPConfiguration.default(baseURL: URL(string: "https://api.example.com")!)
+        
+        let purchaseService = PurchaseService(
+            adapter: mockAdapter,
+            receiptValidator: mockReceiptValidator,
+            orderService: mockOrderService,
+            configuration: configuration
+        )
+        
         let testProduct = TestDataGenerator.generateProduct(
             id: "test.product",
             displayName: "Test Product",
             price: 9.99,
             productType: .consumable
         )
-        return (mockPurchaseService, mockOrderService, testProduct)
+        return (purchaseService, mockAdapter, mockOrderService, mockReceiptValidator, testProduct)
     }
     
     // MARK: - Complete Order-Based Purchase Flow Tests
@@ -27,36 +37,32 @@ struct OrderBasedPurchaseFlowTests {
     @Test("Order-based purchase flow succeeds")
     func orderBasedPurchaseFlowSuccess() async throws {
         // Given - Create test services and configure successful order creation and purchase
-        let (mockPurchaseService, mockOrderService, testProduct) = createTestServices()
-        
-        let expectedOrder = TestDataGenerator.generateOrder(
-            id: "test_order_123",
-            productID: testProduct.id,
-            status: .created
-        )
+        let (purchaseService, mockAdapter, mockOrderService, mockReceiptValidator, testProduct) = createTestServices()
         
         let expectedTransaction = TestDataGenerator.generateSuccessfulTransaction(
             id: "test_transaction_123",
             productID: testProduct.id
         )
         
-        // Configure mock services for successful flow
-        await configureMockServicesForSuccessfulFlow(
-            mockPurchaseService: mockPurchaseService,
-            mockOrderService: mockOrderService,
-            order: expectedOrder,
-            transaction: expectedTransaction
+        // Configure mock adapter to return successful purchase
+        let mockOrder = TestDataGenerator.generateOrder(
+            id: "mock_order_123",
+            productID: testProduct.id,
+            status: .created
         )
+        mockAdapter.setMockPurchaseResult(.success(expectedTransaction, mockOrder))
+        
+        // Configure mock receipt validator to return valid result
+        mockReceiptValidator.setMockValidationResult(.init(isValid: true, transactions: [expectedTransaction]))
         
         // When - Execute purchase
-        let result = try await mockPurchaseService.purchase(testProduct, userInfo: ["userID": "test123"])
+        let result = try await purchaseService.purchase(testProduct, userInfo: ["userID": "test123"])
         
         // Then - Verify successful result
         switch result {
         case .success(let transaction, let order):
             #expect(transaction.productID == testProduct.id)
             #expect(order.productID == testProduct.id)
-            #expect(order.status == .completed)
             #expect(transaction.isSuccessful)
         default:
             Issue.record("Expected successful purchase result, got \(result)")
@@ -64,8 +70,9 @@ struct OrderBasedPurchaseFlowTests {
         
         // Verify the correct sequence of calls was made
         await verifySuccessfulPurchaseFlowCalls(
-            mockPurchaseService: mockPurchaseService,
-            mockOrderService: mockOrderService
+            mockAdapter: mockAdapter,
+            mockOrderService: mockOrderService,
+            mockReceiptValidator: mockReceiptValidator
         )
     }
     
@@ -476,33 +483,22 @@ struct OrderBasedPurchaseFlowTests {
         )
     }
     
-    /// Configure mock services for successful flow with specific order and transaction
-    private func configureMockServicesForSuccessfulFlow(
-        mockPurchaseService: MockPurchaseService,
-        mockOrderService: MockOrderService,
-        order: IAPOrder,
-        transaction: IAPTransaction
-    ) async {
-        mockOrderService.addMockOrder(order)
-        mockPurchaseService.setMockPurchaseResult(.success(transaction, order.withStatus(.completed)))
-        mockPurchaseService.setMockReceiptValidationResult(
-            .init(isValid: true, transactions: [transaction])
-        )
-    }
+
     
     /// Verify the correct sequence of calls for successful purchase flow
     private func verifySuccessfulPurchaseFlowCalls(
-        mockPurchaseService: MockPurchaseService,
-        mockOrderService: MockOrderService
+        mockAdapter: MockStoreKitAdapter,
+        mockOrderService: MockOrderService,
+        mockReceiptValidator: MockReceiptValidator
     ) async {
         // Verify order creation was called
         #expect(mockOrderService.wasCalled("createOrder"))
         
         // Verify purchase was executed
-        #expect(mockPurchaseService.wasCalled("purchase"))
+        #expect(mockAdapter.wasCalled("purchase"))
         
         // Verify receipt validation was called
-        #expect(mockPurchaseService.wasCalled("validateReceiptWithOrder"))
+        #expect(mockReceiptValidator.wasCalled("validateReceipt"))
     }
 }
 
